@@ -215,3 +215,24 @@ INSERT INTO secteurs (slug, nom, description, prix_rapport, nombre_pages) VALUES
 ('energies', 'Énergies Renouvelables', 'Capacité installée, projets en cours, objectifs 2030', 54.99, 13),
 ('textile', 'Textile & Habillement', 'Exportations, emplois, marchés', 44.99, 13),
 ('logistique', 'Logistique & Transport', 'Ports, aéroports, corridors commerciaux', 49.99, 13);
+
+-- 1. Ajouter le champ JSON demandé dans la table secteurs
+ALTER TABLE secteurs 
+ADD COLUMN IF NOT EXISTS donnees_statistiques JSONB;
+
+CREATE TABLE achats (
+    id              SERIAL PRIMARY KEY,
+    id_utilisateur  INT NOT NULL REFERENCES utilisateurs(id) ON DELETE CASCADE,
+    id_secteur      INT NOT NULL REFERENCES secteurs(id),
+    date_achat      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    montant         DECIMAL(10, 2) NOT NULL,
+    statut_paiement VARCHAR(50) DEFAULT 'en_attente',
+    pdf_genere      VARCHAR(500),  -- chemin du fichier PDF
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Index pour optimiser les stats de vente (sous-tâche 3)
+CREATE INDEX idx_achats_utilisateur ON achats(id_utilisateur);
+CREATE INDEX idx_achats_secteur ON achats(id_secteur);
+CREATE INDEX idx_achats_date ON achats(date_achat);
+CREATE INDEX idx_stats_ventes_lookup ON statistiques_ventes(secteur_id, annee, mois);
