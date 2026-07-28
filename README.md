@@ -1,9 +1,10 @@
 # InvestPlatform — Rapport Sectoriel PDF
 
 > **Projet de stage — 3LM Solutions**  
-> Stagiaire : Houcein et Zakariya
+> Stagiaires : Houcein, Zakariya  
 > Encadrante : Lilia Aouani  
-> Date de démarrage : Juillet 2026
+> Date de démarrage : Juillet 2026  
+> Dernière mise à jour : 28 Juillet 2026
 
 ---
 
@@ -56,42 +57,154 @@ InvestPlatform est un service de génération de rapports sectoriels PDF destin�
 
 ---
 
-## ✅ Avancement Actuel
+## 🛠️ Stack Technique Confirmée
 
-### Tâche en cours : "Créer les modèles de données sectorielles"
-- **Statut** : 🟡 En cours
-- **Priorité** : Moyenne
-- **Projet** : InvestPlatform
+| Couche | Technologie |
+|--------|-------------|
+| Frontend | React + Vite |
+| Backend | Node.js + Express |
+| Base de données | PostgreSQL (Neon) |
+| Auth | JWT + bcryptjs |
+| Génération PDF | À implémenter (Puppeteer / wkhtmltopdf) |
+| IA (Narrative) | Groq API — `llama3-8b-8192` |
+| Paiement | PayPal |
 
-#### Ce qui a été fait :
-- [x] Lecture et analyse du cahier des charges (CDC_Rapport_Sectoriel.docx)
-- [x] Identification des 6 secteurs et de leurs données requises
-- [x] Mapping des catégories de l'INS (Institut National de la Statistique) avec les secteurs du projet
-- [x] Recherche des sources de données officielles (INS, BCT, FIPA, ONAGRI, Banque Mondiale, FMI)
-- [x] Collecte de données brutes récentes (2023–2025) via recherche web
-- [x] Définition de la structure JSON type pour chaque secteur
-- [x] Décision de ne PAS utiliser le web scraping (sites tunisiens lents/instables) — privilégier téléchargement Excel + APIs internationales + parsing PDF
+---
 
-#### Structure du modèle de données par secteur :
-```json
-{
-  "secteur": "nom_du_secteur",
-  "donnees_statistiques": { "indicateurs sur 5 ans (2020-2024)" },
-  "chiffres_cles": { "croissance, PIB, emplois, exportations" },
-  "zones_geographiques": [ { "nom", "type", "description" } ],
-  "acteurs_principaux": [ { "nom", "type", "role" } ],
-  "cadre_reglementaire": [ { "titre", "annee", "description", "avantages" } ]
-}
+## ✅ Avancement Détaillé
+
+### ✅ Tâche TERMINÉE : "Concevoir la structure de base de données"
+- **Priorité** : Haute
+- **Date** : 24–28 Juillet 2026
+- **Livrable** : Schéma SQL complet (12 tables) déployé sur Neon
+
+**Tables créées :**
+- `secteurs` — Les 6 secteurs économiques
+- `donnees_statistiques` — Séries temporelles 2020–2024 + projections
+- `chiffres_cles` — Indicateurs agrégés (PIB, emplois, exportations)
+- `zones_geographiques` — Zones franches, côtières, pôles
+- `acteurs_principaux` — Entreprises, agences, startups
+- `cadre_reglementaire` — Lois, incitations, régulations
+- `utilisateurs` — Clients
+- `admins` — Administrateurs
+- `rapports` — PDF générés
+- `paiements` — Transactions
+- `logs_generation` — Traces IA
+- `statistiques_ventes` — Agrégation mensuelle
+
+**Seed data insérée :** Les 6 secteurs avec prix et métadonnées.
+
+---
+
+### 🟡 Tâche EN COURS : "Implémenter l'authentification admin"
+- **Priorité** : Haute
+- **Sous-tâches** :
+  - [x] Créer la table `admins` avec hash sécurisé et rôles
+  - [x] Implémenter l'API login avec JWT
+  - [x] Créer le middleware `verifyAdmin`
+  - [x] Développer la page de login React
+  - [x] Développer le Dashboard admin React
+  - [ ] Connecter le backend à la base Neon (en cours)
+  - [ ] Tester le flux complet register → login → accès protégé
+
+**Fichiers livrés :**
+- `backend/server-neon.js` — Backend connecté à Neon
+- `backend/server.js` — Backend avec fausse DB (backup/test)
+- `frontend/src/pages/LoginPage.jsx` — Interface login
+- `frontend/src/pages/Dashboard.jsx` — Interface dashboard
+- `frontend/src/auth/AuthContext.jsx` — Contexte auth React
+
+---
+
+### ⬜ Tâches À FAIRE (ordre de priorité)
+
+| Ordre | Tâche | Priorité | Statut CRM |
+|-------|-------|----------|------------|
+| 1 | Créer les modèles de données sectorielles | Moyenne | En cours |
+| 2 | Créer la page catalogue des secteurs | Haute | À faire |
+| 3 | Configurer l'API Groq pour génération IA | Haute | À faire |
+| 4 | Implémenter l'intégration de paiement | Haute | À faire |
+| 5 | Créer le système de génération PDF | Haute | À faire |
+| 6 | Développer le panneau admin secteurs | Moyenne | À faire |
+| 7 | Tester le flux complet achat-génération | Moyenne | À faire |
+
+---
+
+## 🔌 Connexion à Neon — Guide Technique
+
+### Schéma de connexion
+
+```
+Frontend React (localhost:5173)
+         │
+         ▼
+Backend Express (localhost:3001)
+         │
+         ▼
+    PostgreSQL Neon
+    (console.neon.tech)
 ```
 
-#### Ce qui reste à faire :
-- [ ] Confirmer la stack technique avec Lilia (backend, DB, ORM, génération PDF)
-- [ ] Télécharger les fichiers Excel de l'INS (ins.tn/statistiques)
-- [ ] Récupérer les données via API Banque Mondiale / FMI
-- [ ] Parser les rapports PDF (CST Tourisme, Annuaire Statistique)
-- [ ] Remplir les modèles JSON pour les 6 secteurs
-- [ ] Créer les migrations / seeds pour la base de données
-- [ ] Implémenter le panneau admin d'édition des données
+### Configuration du `.env`
+
+```env
+DATABASE_URL=postgresql://user:password@ep-xxxx.neon.tech/investplatform?sslmode=require
+JWT_SECRET=ma_cle_super_secrete_pour_investplatform_2026
+PORT=3001
+```
+
+> **Important** : Remplace `DATABASE_URL` par l'URL réelle copiée depuis le dashboard Neon.
+
+### Démarrage du projet
+
+```bash
+# Terminal 1 — Backend
+cd backend
+npm install
+npm start
+
+# Terminal 2 — Frontend
+cd frontend
+npm install
+npm run dev
+```
+
+Accès : http://localhost:5173
+
+### Vérification de la connexion
+
+| Test | Commande SQL sur Neon | Résultat attendu |
+|------|----------------------|------------------|
+| Tables existantes | `\dt` | Liste des 12 tables |
+| Secteurs insérés | `SELECT * FROM secteurs;` | 6 lignes |
+| Admin créé | `SELECT * FROM admins;` | Compte visible |
+
+---
+
+## 📁 Structure du Projet
+
+```
+investplatform-admin/
+├── backend/
+│   ├── server-neon.js      ← Backend connecté à Neon
+│   ├── server.js           ← Backend avec fausse DB (backup)
+│   ├── package.json
+│   └── .env
+├── frontend/
+│   ├── index.html
+│   ├── vite.config.js
+│   ├── package.json
+│   └── src/
+│       ├── main.jsx
+│       ├── App.jsx
+│       ├── auth/
+│       │   └── AuthContext.jsx
+│       └── pages/
+│           ├── LoginPage.jsx
+│           └── Dashboard.jsx
+└── sql/
+    └── verify-neon.sql     ← Vérification/création rapide
+```
 
 ---
 
@@ -115,19 +228,16 @@ InvestPlatform est un service de génération de rapports sectoriels PDF destin�
 
 ---
 
-## 🛠️ Stack Technique (À confirmer)
+## 🐛 Erreurs Connues & Solutions
 
-> ⚠️ En attente de confirmation par Lilia / équipe 3LM Solutions
-
-| Couche | Technologie (proposition) |
-|--------|---------------------------|
-| Frontend | React / Next.js |
-| Backend | Node.js (Express) ou Python (FastAPI) |
-| Base de données | PostgreSQL ou MongoDB |
-| ORM | Prisma / Sequelize / SQLAlchemy |
-| Génération PDF | Puppeteer / wkhtmltopdf |
-| IA (Narrative) | Groq API — `llama3-8b-8192` |
-| Paiement | PayPal |
+| Erreur | Cause | Solution |
+|--------|-------|----------|
+| `self signed certificate` | SSL Neon | Déjà géré (`rejectUnauthorized: false`) |
+| `database does not exist` | Mauvais nom de DB | Vérifier l'URL dans `.env` |
+| `relation does not exist` | Table manquante | Exécuter `sql/verify-neon.sql` sur Neon |
+| `ECONNREFUSED` | Mauvais host/port | Vérifier l'URL Neon complète |
+| `npm : terme non reconnu` | Node.js non installé | Installer depuis nodejs.org |
+| `Port 3001 already in use` | Conflit de port | Fermer l'autre processus ou changer le port |
 
 ---
 
@@ -138,25 +248,28 @@ InvestPlatform est un service de génération de rapports sectoriels PDF destin�
 - **Suivi quotidien** : Groupe WhatsApp
 - **Point hebdomadaire** : Réunion de suivi avec Lilia
 - **Questions techniques** : Posées sur le groupe WhatsApp
-- **Contact privé** : WhatsApp Lilia 
+- **Contact privé** : WhatsApp Lilia
 
 ---
 
 ## 📅 Prochaines Étapes Immédiates
 
-1. **Confirmer la stack technique** avec l'équipe
-2. **Accéder au repo GitHub** du projet
-3. **Télécharger les Excel de l'INS** (priorité : Tourisme, Agriculture, Energie)
-4. **Récupérer les données API** Banque Mondiale
-5. **Structurer le premier secteur** (Tourisme — le plus documenté)
-6. **Soumettre le modèle** à Lilia pour validation
+1. [ ] Finaliser la connexion backend ↔ Neon et valider les tests
+2. [ ] Remplir les tables métier avec les données de l'INS (Tourisme en priorité)
+3. [ ] Compléter le panneau admin avec l'édition des données chiffrées
+4. [ ] Intégrer l'API Groq pour les sections d'analyse narrative
+5. [ ] Développer la page catalogue des 6 secteurs (aperçu gratuit)
+6. [ ] Implémenter le paiement PayPal
+7. [ ] Créer le système de génération PDF hybride (DB + IA)
 
 ---
 
 ## 📄 Documents du Projet
 
-- [Cahier des charges — Rapport Sectoriel PDF](CDC_Rapport_Sectoriel.docx)
-  
+- Cahier des charges : `CDC_Rapport_Sectoriel.docx`
+- Schéma SQL : `schema_investplatform.sql`
+- Ce README : `README.md`
+
 ---
 
-*Dernière mise à jour : 23 Juillet 2026*
+*Dernière mise à jour : 28 Juillet 2026*

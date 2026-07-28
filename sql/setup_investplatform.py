@@ -62,6 +62,7 @@ DROP TABLE IF EXISTS zones_geographiques CASCADE;
 DROP TABLE IF EXISTS chiffres_cles CASCADE;
 DROP TABLE IF EXISTS donnees_statistiques CASCADE;
 DROP TABLE IF EXISTS secteurs CASCADE;
+DROP TABLE IF EXISTS achats CASCADE;
 
 -- 1. TABLE : secteurs
 CREATE TABLE secteurs (
