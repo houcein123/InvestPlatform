@@ -2,7 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
-
+import Catalogue from './pages/Catalogue';
 function App() {
   const { admin, loading } = useAuth();
 
@@ -13,6 +13,7 @@ function App() {
       <Route path="/login" element={admin ? <Navigate to="/dashboard" /> : <LoginPage />} />
       <Route path="/dashboard" element={admin ? <Dashboard /> : <Navigate to="/login" />} />
       <Route path="/" element={<Navigate to={admin ? "/dashboard" : "/login"} />} />
+      <Route path="/catalogue" element={<Catalogue />} />
     </Routes>
   );
 }
