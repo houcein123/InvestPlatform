@@ -6,8 +6,17 @@ const cors = require('cors');
 const { Pool } = require('pg');
 
 const app = express();
+// Import du service Groq
+const { generateText } = require("./services/groqService");
+const prompts = require("./services/promptService");
+const generatePDF = require("./utils/pdfGenerator");
+const path = require("path");
 app.use(cors());
 app.use(express.json());
+app.use(
+    "/reports",
+    express.static(path.join(__dirname, "reports"))
+);
 
 // ── CONNEXION NEON POSTGRESQL ──
 const pool = new Pool({
@@ -139,7 +148,33 @@ app.get('/api/admin/secteurs', verifyAdmin, async (req, res) => {
         res.status(500).json({ error: 'Erreur serveur' });
     }
 });
+// Catalogue public (sans authentification)
+app.get('/api/secteurs', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT
+                id,
+                nom,
+                description,
+                prix_rapport,
+                nombre_pages,
+                updated_at
+            FROM secteurs
+            WHERE est_actif = true
+            ORDER BY id
+        `);
 
+        res.json({
+            secteurs: result.rows
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({
+            error: 'Erreur serveur'
+        });
+    }
+});
 // Modifier secteur (sur NEON)
 app.put('/api/admin/secteurs/:id', verifyAdmin, async (req, res) => {
     try {
@@ -177,11 +212,120 @@ app.get('/api/admin/statistiques-ventes', verifyAdmin, async (req, res) => {
         res.status(500).json({ error: 'Erreur serveur' });
     }
 });
+// ==========================================
+// Génération complète du rapport IA
+// ==========================================
 
+app.post("/api/report/generate", async (req, res) => {
+
+    try {
+
+        const { sectorId } = req.body;
+
+        if (!sectorId) {
+            return res.status(400).json({
+                success: false,
+                error: "sectorId est obligatoire"
+            });
+        }
+
+        // Récupération du secteur depuis PostgreSQL
+        const result = await pool.query(
+            "SELECT * FROM secteurs WHERE id = $1",
+            [sectorId]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: "Secteur introuvable"
+            });
+        }
+
+        const sector = result.rows[0];
+
+        console.log("Secteur :", sector.nom);
+
+        // Génération IA
+        const introduction = await generateText(
+            prompts.introduction(sector)
+        );
+
+        const tendances = await generateText(
+            prompts.tendances(sector)
+        );
+
+        const opportunites = await generateText(
+            prompts.opportunites(sector)
+        );
+
+        const risques = await generateText(
+            prompts.risques(sector)
+        );
+
+        const benchmarking = await generateText(
+            prompts.benchmarking(sector)
+        );
+
+        const recommandations = await generateText(
+            prompts.recommandations(sector)
+        );
+
+        const perspectives = await generateText(
+            prompts.perspectives(sector)
+        );
+
+        const rapport = {
+
+            secteur: sector.nom,
+
+            introduction,
+
+            tendances,
+
+            opportunites,
+
+            risques,
+
+            benchmarking,
+
+            recommandations,
+
+            perspectives
+
+        };
+
+        const pdfPath = generatePDF(rapport);
+
+        const pdfUrl = `http://localhost:3001/reports/${rapport.secteur}.pdf`;
+
+        res.json({
+            success: true,
+            rapport,
+            pdf: pdfUrl
+        });
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        res.status(500).json({
+
+            success: false,
+
+            error: error.message
+
+        });
+
+    }
+
+});
 // Démarrage
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
     console.log('========================================');
+    console.log('  ✅ Groq SDK chargé');
     console.log('  🚀 Backend InvestPlatform démarré');
     console.log('  📡 URL: http://localhost:' + PORT);
     console.log('  🐘 DB: PostgreSQL (Neon)');
