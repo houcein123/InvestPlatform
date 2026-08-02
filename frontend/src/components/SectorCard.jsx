@@ -1,11 +1,18 @@
 export default function SectorCard({ sector }) {
 
     const preview = () => {
-        window.open(sector.pdf, "_blank");
+
+        window.open(
+            `http://localhost:3001/api/catalogue/${sector.id}/preview`,
+            "_blank"
+        );
+
     };
 
     const buy = () => {
-        alert("Paiement bientôt disponible.");
+
+        alert("Le paiement sera disponible prochainement.");
+
     };
 
     return (
@@ -13,20 +20,29 @@ export default function SectorCard({ sector }) {
         <div style={styles.card}>
 
             <img
-                src={sector.image}
-                alt={sector.name}
+                src={`http://localhost:3001/images/${sector.image}`}
+                alt={sector.nom}
                 style={styles.image}
+                onError={(e) => {
+                    e.target.src = "https://placehold.co/600x400?text=InvestPlatform";
+                }}
             />
 
-            <h2>{sector.name}</h2>
+            <h2>{sector.nom}</h2>
 
             <p>{sector.description}</p>
 
-            <p>📄 {sector.pages} pages</p>
+            <p>
+                📄 {sector.nombre_pages} pages
+            </p>
 
-            <p>💰 {sector.price} TND</p>
+            <p>
+                💰 {sector.prix_rapport} TND
+            </p>
 
-            <p>📅 {sector.updatedAt}</p>
+            <p>
+                📅 {new Date(sector.updated_at).toLocaleDateString()}
+            </p>
 
             <div style={styles.buttons}>
 
@@ -49,6 +65,7 @@ export default function SectorCard({ sector }) {
         </div>
 
     );
+
 }
 
 const styles = {
@@ -64,7 +81,8 @@ const styles = {
         width: "100%",
         height: 180,
         objectFit: "cover",
-        borderRadius: 10
+        borderRadius: 10,
+        marginBottom: 15
     },
 
     buttons: {
