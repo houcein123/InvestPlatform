@@ -1,275 +1,241 @@
 # InvestPlatform — Rapport Sectoriel PDF
 
-> **Projet de stage — 3LM Solutions**  
-> Stagiaires : Houcein, Zakariya  
-> Encadrante : Lilia Aouani  
-> Date de démarrage : Juillet 2026  
-> Dernière mise à jour : 28 Juillet 2026
+> **Projet de stage — 3LM Solutions**
+> Stagiaires : Houcein, Zakariya · Encadrante : Lilia Aouani
+> Cahier des charges : [`CDC_Rapport_Sectoriel.docx`](CDC_Rapport_Sectoriel.docx)
+
+Service de génération de rapports sectoriels PDF pour les investisseurs
+étrangers intéressés par la Tunisie. Chaque rapport combine des **données
+chiffrées officielles** stockées en base et une **analyse narrative rédigée par
+IA** (Groq) à partir de ces mêmes chiffres.
 
 ---
 
-## 📌 Contexte
+## 🚀 Démarrage
 
-InvestPlatform est un service de génération de rapports sectoriels PDF destinés aux investisseurs étrangers souhaitant s'informer sur les opportunités économiques en Tunisie.
+```bash
+cd backend && npm install && npm run dev
+```
 
-**Flow du service :**
-1. **Catalogue** — L'utilisateur parcourt les 6 secteurs et consulte un aperçu gratuit des 2 premières pages.
-2. **Paiement** — Paiement à l'acte via PayPal.
-3. **Génération** — Données sectorielles + analyse narrative IA (Groq API) → PDF assemblé (20–40 sec).
-4. **Téléchargement** — PDF téléchargeable et sauvegardé dans l'espace utilisateur.
+```bash
+cd frontend && npm install && npm run dev
+```
 
-**Approche hybride :**
-- Données structurées stockées en base (admin)
-- Analyse narrative enrichie par IA (Groq API — modèle `llama3-8b-8192`)
+Le frontend est servi sur http://localhost:5173, l'API sur http://localhost:3001.
+En développement, le proxy Vite redirige `/api` et `/reports` vers le backend :
+aucune URL de backend n'est écrite en dur dans le code React.
+
+### Configuration
+
+Copier `backend/.env.example` vers `backend/.env` et renseigner :
+
+| Variable | Rôle |
+|----------|------|
+| `DATABASE_URL` | Chaîne de connexion Neon (obligatoire) |
+| `JWT_SECRET` | Signature des jetons admin (obligatoire) |
+| `GROQ_API_KEY` | Clé Groq — sans elle, les sections IA restent vides |
+| `GROQ_MODEL` | Modèle utilisé (défaut `llama-3.3-70b-versatile`) |
+| `PORT`, `CORS_ORIGIN` | Réseau |
+
+Le serveur refuse de démarrer si une variable obligatoire manque ou si la base
+est injoignable — un échec explicite au lancement vaut mieux qu'une API qui
+répond 500 à chaque requête.
 
 ---
 
-## 🏗️ Architecture du Rapport PDF (13 sections)
+## 🗂️ Structure du projet
+
+```
+InvestPlatform/
+├── backend/
+│   └── src/
+│       ├── server.js              ← point d'entrée
+│       ├── config/                env.js (config centralisée), db.js (pool pg)
+│       ├── middleware/            auth.js (verifyAdmin), errorHandler.js
+│       ├── routes/                index.js = table de routage complète
+│       │   ├── auth.routes.js         /api/admin/register|login|me
+│       │   ├── catalogue.routes.js    /api/catalogue (public + aperçu)
+│       │   ├── payment.routes.js      /api/payment  (PayPal simulé)
+│       │   ├── report.routes.js       /api/report   (génération + progression)
+│       │   └── admin.routes.js        /api/admin/*  (protégé)
+│       ├── services/
+│       │   ├── sectorRepository.js    seul accès SQL aux tables métier
+│       │   ├── promptService.js       les 7 prompts + contexte chiffré
+│       │   ├── groqService.js         client Groq
+│       │   ├── reportService.js       orchestration données → IA → PDF → base
+│       │   ├── salesService.js        achats et statistiques de vente
+│       │   └── jobStore.js            suivi de progression des générations
+│       └── pdf/
+│           ├── sections.js            SOURCE UNIQUE des 12 sections
+│           ├── theme.js               charte + primitives de mise en page
+│           └── reportPdf.js           rapport complet et aperçu 2 pages
+├── frontend/
+│   └── src/
+│       ├── api/client.js          seul point d'appel au backend
+│       ├── auth/AuthContext.jsx
+│       ├── components/            NavBar, SectorCard, ProgressBar
+│       ├── pages/
+│       │   ├── Catalogue.jsx          page d'accueil publique
+│       │   ├── LoginPage.jsx
+│       │   └── admin/
+│       │       ├── Dashboard.jsx      ventes, revenu, secteurs
+│       │       └── SecteurDonnees.jsx édition des données + régénération
+│       └── styles/global.css      charte unique (aucun style inline)
+├── data/                          CSV de l'INS, un dossier par secteur
+├── sql/
+│   ├── schema.sql                 SOURCE UNIQUE du modèle de données
+│   ├── migrations/                évolutions d'une base existante
+│   └── setup_database.py          création du schéma + import des CSV
+└── CDC_Rapport_Sectoriel.docx
+```
+
+**Deux principes structurants :**
+
+1. **Une source de vérité par sujet.** Les sections du rapport sont décrites une
+   seule fois (`pdf/sections.js`) et alimentent à la fois la couverture, le
+   sommaire, l'aperçu gratuit et le corps du document : le sommaire ne peut plus
+   annoncer une section qui n'est pas produite. De même, le schéma SQL n'existe
+   qu'à un endroit (`sql/schema.sql`), lu par le script Python.
+2. **Une porte d'entrée par couche.** Le SQL métier vit dans
+   `sectorRepository.js`, les appels HTTP du frontend dans `api/client.js`.
+
+---
+
+## 🔄 Flow du service (CDC §6)
+
+| Étape | Route | Détail |
+|-------|-------|--------|
+| 1. Catalogue | `GET /api/catalogue` | 6 secteurs, prix, pages, date de mise à jour |
+| 1bis. Aperçu | `GET /api/catalogue/:id/preview` | 2 pages — couverture + sommaire, sans appel IA |
+| 2. Commande | `POST /api/payment/create-order` | crée un achat `en_attente` |
+| 2bis. Paiement | `POST /api/payment/capture` | passe l'achat à `paye` |
+| 3. Génération | `POST /api/report/generate` | renvoie un `jobId` (202) |
+| 3bis. Progression | `GET /api/report/status/:jobId` | alimente la barre de progression |
+| 4. Téléchargement | `GET /reports/<fichier>.pdf` | PDF servi en statique |
+
+La génération n'est possible qu'avec un achat **payé** portant sur le **même
+secteur** : la route refuse sinon (`402`).
+
+L'aperçu gratuit est produit par les mêmes fonctions que le rapport payant :
+l'acheteur voit exactement les deux premières pages de ce qu'il achètera, et
+l'aperçu reste instantané même si le quota Groq est épuisé.
+
+---
+
+## 📄 Structure du rapport (CDC §5)
+
+Couverture + sommaire, puis 12 sections — 14 pages minimum (15 en pratique) :
 
 | # | Section | Source |
 |---|---------|--------|
-| 1 | Couverture + Sommaire | Template |
-| 2 | Présentation générale du secteur | IA |
-| 3 | Chiffres clés et graphiques | **Base de données** |
-| 4 | Analyse des tendances | IA |
-| 5 | Acteurs principaux | **Base de données** |
-| 6 | Cadre réglementaire et fiscal | **Base de données** |
-| 7 | Zones géographiques et zones franches | **Base de données** |
-| 8 | Opportunités identifiées | IA |
-| 9 | Analyse des risques | IA |
-| 10 | Benchmarking régional (Maroc, Égypte) | IA |
-| 11 | Recommandations investisseur | IA |
-| 12 | Perspectives 2025–2028 | IA |
-| 13 | Sources et méthodologie | Mixte |
+| 1 | Présentation générale du secteur | IA |
+| 2 | Chiffres clés et graphiques | Base |
+| 3 | Analyse des tendances | IA |
+| 4 | Acteurs principaux | Base |
+| 5 | Cadre réglementaire et fiscal | Base |
+| 6 | Zones géographiques et zones franches | Base |
+| 7 | Opportunités identifiées | IA |
+| 8 | Analyse des risques | IA |
+| 9 | Benchmarking régional (Maroc, Égypte) | IA |
+| 10 | Recommandations investisseur | IA |
+| 11 | Perspectives 2025-2028 | IA |
+| 12 | Sources et méthodologie | Base |
+
+Les graphiques sont dessinés directement avec les primitives vectorielles de
+PDFKit : aucune librairie de charts n'est nécessaire.
+
+### Approche hybride
+
+`promptService.buildDataContext()` sérialise les données chiffrées du secteur
+(chiffres clés, séries statistiques, zones, acteurs, cadre réglementaire) et
+**injecte ce bloc dans chacun des 7 prompts**, avec la consigne de ne pas
+inventer de chiffre absent. L'analyse narrative commente donc les mêmes données
+que celles imprimées dans les sections « données » du rapport.
+
+Chaque appel est tracé dans `logs_generation` (prompt, réponse, durée, statut).
+Une section IA en échec n'interrompt pas la génération : le PDF affiche un
+encart explicite et le rapport reste livrable.
 
 ---
 
-## 📊 Les 6 Secteurs Disponibles
+## 🛠️ Base de données
 
-| Secteur | Données clés | Catégorie INS correspondante |
-|---------|-------------|------------------------------|
-| 🏖️ **Tourisme** | Flux touristiques, capacité hôtelière, recettes, zones côtières | Tourisme + Commerce Extérieur |
-| 🌾 **Agriculture** | Surfaces cultivées, exportations, cultures principales | Agriculture + Climatologie |
-| 💻 **Technologies & Numérique** | Startups, export IT, centres offshore | Technologies de communication |
-| ⚡ **Énergies Renouvelables** | Capacité installée, projets, objectifs 2030 | Energie + Environnement |
-| 👕 **Textile & Habillement** | Exportations, emplois, marchés | Industrie + Commerce Extérieur |
-| 🚢 **Logistique & Transport** | Ports, aéroports, corridors commerciaux | Transport + Commerce Extérieur |
-
----
-
-## 🛠️ Stack Technique Confirmée
-
-| Couche | Technologie |
-|--------|-------------|
-| Frontend | React + Vite |
-| Backend | Node.js + Express |
-| Base de données | PostgreSQL (Neon) |
-| Auth | JWT + bcryptjs |
-| Génération PDF | À implémenter (Puppeteer / wkhtmltopdf) |
-| IA (Narrative) | Groq API — `llama3-8b-8192` |
-| Paiement | PayPal |
-
----
-
-## ✅ Avancement Détaillé
-
-### ✅ Tâche TERMINÉE : "Concevoir la structure de base de données"
-- **Priorité** : Haute
-- **Date** : 24–28 Juillet 2026
-- **Livrable** : Schéma SQL complet (12 tables) déployé sur Neon
-
-**Tables créées :**
-- `secteurs` — Les 6 secteurs économiques
-- `donnees_statistiques` — Séries temporelles 2020–2024 + projections
-- `chiffres_cles` — Indicateurs agrégés (PIB, emplois, exportations)
-- `zones_geographiques` — Zones franches, côtières, pôles
-- `acteurs_principaux` — Entreprises, agences, startups
-- `cadre_reglementaire` — Lois, incitations, régulations
-- `utilisateurs` — Clients
-- `admins` — Administrateurs
-- `rapports` — PDF générés
-- `paiements` — Transactions
-- `logs_generation` — Traces IA
-- `statistiques_ventes` — Agrégation mensuelle
-
-**Seed data insérée :** Les 6 secteurs avec prix et métadonnées.
-
----
-
-### 🟡 Tâche EN COURS : "Implémenter l'authentification admin"
-- **Priorité** : Haute
-- **Sous-tâches** :
-  - [x] Créer la table `admins` avec hash sécurisé et rôles
-  - [x] Implémenter l'API login avec JWT
-  - [x] Créer le middleware `verifyAdmin`
-  - [x] Développer la page de login React
-  - [x] Développer le Dashboard admin React
-  - [ ] Connecter le backend à la base Neon (en cours)
-  - [ ] Tester le flux complet register → login → accès protégé
-
-**Fichiers livrés :**
-- `backend/server-neon.js` — Backend connecté à Neon
-- `backend/server.js` — Backend avec fausse DB (backup/test)
-- `frontend/src/pages/LoginPage.jsx` — Interface login
-- `frontend/src/pages/Dashboard.jsx` — Interface dashboard
-- `frontend/src/auth/AuthContext.jsx` — Contexte auth React
-
----
-
-### ⬜ Tâches À FAIRE (ordre de priorité)
-
-| Ordre | Tâche | Priorité | Statut CRM |
-|-------|-------|----------|------------|
-| 1 | Créer les modèles de données sectorielles | Moyenne | En cours |
-| 2 | Créer la page catalogue des secteurs | Haute | À faire |
-| 3 | Configurer l'API Groq pour génération IA | Haute | À faire |
-| 4 | Implémenter l'intégration de paiement | Haute | À faire |
-| 5 | Créer le système de génération PDF | Haute | À faire |
-| 6 | Développer le panneau admin secteurs | Moyenne | À faire |
-| 7 | Tester le flux complet achat-génération | Moyenne | À faire |
-
----
-
-## 🔌 Connexion à Neon — Guide Technique
-
-### Schéma de connexion
-
-```
-Frontend React (localhost:5173)
-         │
-         ▼
-Backend Express (localhost:3001)
-         │
-         ▼
-    PostgreSQL Neon
-    (console.neon.tech)
-```
-
-### Configuration du `.env`
-
-```env
-DATABASE_URL=postgresql://user:password@ep-xxxx.neon.tech/investplatform?sslmode=require
-JWT_SECRET=ma_cle_super_secrete_pour_investplatform_2026
-PORT=3001
-```
-
-> **Important** : Remplace `DATABASE_URL` par l'URL réelle copiée depuis le dashboard Neon.
-
-### Démarrage du projet
+13 tables sur PostgreSQL (Neon). Le script de setup couvre trois opérations
+indépendantes :
 
 ```bash
-# Terminal 1 — Backend
-cd backend
-npm install
-npm start
-
-# Terminal 2 — Frontend
-cd frontend
-npm install
-npm run dev
+pip install -r requirements.txt
+python sql/setup_database.py --import-csv   # importe data/*.csv
+python sql/setup_database.py --seed         # zones, acteurs, cadre, chiffres clés
+python sql/setup_database.py --all          # --reset + --import-csv + --seed
 ```
 
-Accès : http://localhost:5173
+`--reset` exécute `sql/schema.sql`, qui **supprime toutes les tables** ; le
+script demande confirmation. Les CSV sont lus dans le dossier local `data/`
+(l'ancienne version les téléchargeait depuis GitHub).
 
-### Vérification de la connexion
+Pour faire évoluer une base existante sans la vider, utiliser
+`sql/migrations/`.
 
-| Test | Commande SQL sur Neon | Résultat attendu |
-|------|----------------------|------------------|
-| Tables existantes | `\dt` | Liste des 12 tables |
-| Secteurs insérés | `SELECT * FROM secteurs;` | 6 lignes |
-| Admin créé | `SELECT * FROM admins;` | Compte visible |
+### Limites connues des données
+
+- Les CSV de l'INS couvrent **2015-2023**, alors que le schéma stocke
+  2020-2024 : `valeur_2024` reste donc vide pour la plupart des indicateurs,
+  et les années 2015-2019 ne sont pas importées.
+- Certains tableaux de l'INS sont **trimestriels** ; l'import retient la
+  dernière valeur connue de chaque année.
+- Les colonnes `projection_2025..2028` ne sont pas encore alimentées : les
+  graphiques n'affichent donc que l'historique.
 
 ---
 
-## 📁 Structure du Projet
+## 🔐 Panneau admin (CDC §7)
 
-```
-investplatform-admin/
-├── backend/
-│   ├── server-neon.js      ← Backend connecté à Neon
-│   ├── server.js           ← Backend avec fausse DB (backup)
-│   ├── package.json
-│   └── .env
-├── frontend/
-│   ├── index.html
-│   ├── vite.config.js
-│   ├── package.json
-│   └── src/
-│       ├── main.jsx
-│       ├── App.jsx
-│       ├── auth/
-│       │   └── AuthContext.jsx
-│       └── pages/
-│           ├── LoginPage.jsx
-│           └── Dashboard.jsx
-└── sql/
-    └── verify-neon.sql     ← Vérification/création rapide
-```
+Accessible sur `/admin` après connexion (`/login`).
+
+- **Tableau de bord** — rapports vendus, revenu total et par secteur, derniers
+  rapports générés, édition rapide des secteurs (nom, description, prix, statut).
+- **Données d'un secteur** (`/admin/secteurs/:id`) — formulaire des chiffres
+  clés, ajout/suppression des zones, acteurs et textes réglementaires, liste des
+  séries statistiques importées, et bouton **Régénérer le rapport** avec suivi de
+  progression.
+
+Enregistrer des chiffres clés rafraîchit automatiquement la date de mise à jour
+affichée au catalogue.
 
 ---
 
-## 📁 Sources de Données Identifiées
+## ⚠️ Points ouverts
 
-### Sources Officielles Tunisiennes
+| Sujet | État |
+|-------|------|
+| **PayPal** | Simulé. `payment.routes.js` trace un vrai achat en base mais valide le paiement sans appel externe ; l'intégration se limitera à remplacer le corps des deux routes. |
+| **Comptes clients** | La table `utilisateurs` existe, mais seule l'authentification **admin** est implémentée. Les achats sont donc enregistrés sans client rattaché (`id_utilisateur` NULL) et il n'y a pas encore d'« espace utilisateur » où retrouver ses rapports. |
+| **Projections 2025-2028** | Colonnes prévues au schéma, pas encore alimentées. |
+| **Suivi des générations** | En mémoire (`jobStore`) : un job ne survit pas à un redémarrage du serveur. Le PDF produit, lui, est bien persisté. |
+
+---
+
+## 📁 Sources de données
+
 | Source | URL | Données |
 |--------|-----|---------|
-| **INS** | https://www.ins.tn/statistiques/74 | PIB, comptes nationaux, secteurs, emploi |
+| **INS** | https://www.ins.tn | PIB, comptes nationaux, emploi, secteurs |
 | **BCT** | https://www.bct.gov.tn | Recettes touristiques, balance des paiements |
-| **FIPA** | https://www.fipa.tn | IDE par secteur, projets, réglementation |
-| **ONAGRI** | https://www.onagri.nat.tn | Agriculture, surfaces, exportations |
-| **ANME** | https://www.anme.nat.tn | Énergies renouvelables, capacité installée |
-
-### Sources Internationales (API)
-| Source | API | Données |
-|--------|-----|---------|
-| **Banque Mondiale** | api.worldbank.org | Macro, PIB sectoriel, énergie, tourisme |
-| **FMI** | data.imf.org | Commerce, dette, projections |
-| **UNCTAD** | unctadstat.unctad.org | Commerce extérieur, IDE |
+| **FIPA** | https://www.fipa.tn | IDE par secteur, réglementation |
+| **ONAGRI** | https://www.onagri.nat.tn | Agriculture |
+| **ANME** | https://www.anme.nat.tn | Énergies renouvelables |
+| **Banque Mondiale** | api.worldbank.org | Macro-économie |
 
 ---
 
-## 🐛 Erreurs Connues & Solutions
+## 🐛 Erreurs courantes
 
 | Erreur | Cause | Solution |
 |--------|-------|----------|
-| `self signed certificate` | SSL Neon | Déjà géré (`rejectUnauthorized: false`) |
-| `database does not exist` | Mauvais nom de DB | Vérifier l'URL dans `.env` |
-| `relation does not exist` | Table manquante | Exécuter `sql/verify-neon.sql` sur Neon |
-| `ECONNREFUSED` | Mauvais host/port | Vérifier l'URL Neon complète |
-| `npm : terme non reconnu` | Node.js non installé | Installer depuis nodejs.org |
-| `Port 3001 already in use` | Conflit de port | Fermer l'autre processus ou changer le port |
-
----
-
-## 👥 Méthode de Travail
-
-- **Mode** : 100% remote
-- **Horaires** : Flexibles (équipe de 9h à 18h)
-- **Suivi quotidien** : Groupe WhatsApp
-- **Point hebdomadaire** : Réunion de suivi avec Lilia
-- **Questions techniques** : Posées sur le groupe WhatsApp
-- **Contact privé** : WhatsApp Lilia
-
----
-
-## 📅 Prochaines Étapes Immédiates
-
-1. [ ] Finaliser la connexion backend ↔ Neon et valider les tests
-2. [ ] Remplir les tables métier avec les données de l'INS (Tourisme en priorité)
-3. [ ] Compléter le panneau admin avec l'édition des données chiffrées
-4. [ ] Intégrer l'API Groq pour les sections d'analyse narrative
-5. [ ] Développer la page catalogue des 6 secteurs (aperçu gratuit)
-6. [ ] Implémenter le paiement PayPal
-7. [ ] Créer le système de génération PDF hybride (DB + IA)
-
----
-
-## 📄 Documents du Projet
-
-- Cahier des charges : `CDC_Rapport_Sectoriel.docx`
-- Schéma SQL : `schema_investplatform.sql`
-- Ce README : `README.md`
-
----
-
-*Dernière mise à jour : 28 Juillet 2026*
+| `Variables d'environnement manquantes` | `.env` absent ou incomplet | Copier `backend/.env.example` |
+| `Connexion PostgreSQL impossible` | URL Neon invalide | Vérifier `DATABASE_URL` |
+| `GROQ_API_KEY absente` (avertissement) | Clé non configurée | Les sections IA restent vides ; le reste fonctionne |
+| `Serveur injoignable` côté React | Backend arrêté | `cd backend && npm run dev` |
+| `Aucun paiement confirmé` | Génération appelée sans achat payé | Passer par `create-order` puis `capture` |
+| `Port 3001 already in use` | Instance déjà lancée | Fermer l'autre processus ou changer `PORT` |

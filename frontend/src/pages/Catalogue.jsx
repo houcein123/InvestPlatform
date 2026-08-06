@@ -1,79 +1,43 @@
-import { useEffect, useState } from "react";
-import SectorCard from "../components/SectorCard";
+import { useEffect, useState } from 'react';
+import { api } from '../api/client';
+import SectorCard from '../components/SectorCard';
 
+/** Catalogue public des 6 secteurs (CDC §3). */
 export default function Catalogue() {
+  const [secteurs, setSecteurs] = useState([]);
+  const [erreur, setErreur] = useState('');
+  const [chargement, setChargement] = useState(true);
 
-    const [sectors, setSectors] = useState([]);
-    const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    api.catalogue()
+      .then((data) => setSecteurs(data.secteurs))
+      .catch((err) => setErreur(err.message))
+      .finally(() => setChargement(false));
+  }, []);
 
-    useEffect(() => {
+  if (chargement) return <div className="loading">Chargement du catalogue…</div>;
 
-        fetch("http://localhost:3001/api/catalogue")
-            .then((res) => res.json())
-            .then((data) => {
+  return (
+    <div className="page">
+      <header className="page-header">
+        <h1>Rapports sectoriels</h1>
+        <p>
+          Analyses combinant les données officielles tunisiennes et une synthèse rédigée par IA.
+          Consultez gratuitement les deux premières pages avant d'acheter.
+        </p>
+      </header>
 
-                setSectors(data.secteurs);
-                setLoading(false);
+      {erreur && <p className="alert alert--error">{erreur}</p>}
 
-            })
-            .catch((err) => {
+      {!erreur && secteurs.length === 0 && (
+        <p className="empty">Aucun secteur disponible pour le moment.</p>
+      )}
 
-                console.error(err);
-                setLoading(false);
-
-            });
-
-    }, []);
-
-    if (loading) {
-        return (
-            <div style={styles.loading}>
-                Chargement...
-            </div>
-        );
-    }
-
-    return (
-
-        <div style={styles.container}>
-
-            <h1>Catalogue des Rapports</h1>
-
-            <div style={styles.grid}>
-
-                {sectors.map((sector) => (
-
-                    <SectorCard
-                        key={sector.id}
-                        sector={sector}
-                    />
-
-                ))}
-
-            </div>
-
-        </div>
-
-    );
-
+      <div className="grid grid--sectors">
+        {secteurs.map((secteur) => (
+          <SectorCard key={secteur.id} sector={secteur} />
+        ))}
+      </div>
+    </div>
+  );
 }
-
-const styles = {
-
-    container: {
-        padding: 30
-    },
-
-    loading: {
-        textAlign: "center",
-        marginTop: 50,
-        fontSize: 20
-    },
-
-    grid: {
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))",
-        gap: 25
-    }
-
-};

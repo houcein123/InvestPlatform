@@ -1,25 +1,35 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
-import LoginPage from './pages/LoginPage';
-import Dashboard from './pages/Dashboard';
+import NavBar from './components/NavBar';
 import Catalogue from './pages/Catalogue';
-function App() {
-  const { admin, loading } = useAuth();
+import LoginPage from './pages/LoginPage';
+import Dashboard from './pages/admin/Dashboard';
+import SecteurDonnees from './pages/admin/SecteurDonnees';
 
-  if (loading) return <div style={styles.loading}>Chargement...</div>;
-
-  return (
-    <Routes>
-      <Route path="/login" element={admin ? <Navigate to="/dashboard" /> : <LoginPage />} />
-      <Route path="/dashboard" element={admin ? <Dashboard /> : <Navigate to="/login" />} />
-      <Route path="/" element={<Navigate to={admin ? "/dashboard" : "/login"} />} />
-      <Route path="/catalogue" element={<Catalogue />} />
-    </Routes>
-  );
+/** Garde de route : renvoie vers la connexion si aucun admin n'est authentifié. */
+function RequireAdmin({ children }) {
+  const { admin } = useAuth();
+  return admin ? children : <Navigate to="/login" replace />;
 }
 
-const styles = {
-  loading: { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', fontSize: 18 }
-};
+export default function App() {
+  const { loading } = useAuth();
 
-export default App;
+  if (loading) return <div className="loading">Chargement…</div>;
+
+  return (
+    <>
+      <NavBar />
+      <Routes>
+        {/* Le catalogue est la porte d'entrée publique du service (CDC §3). */}
+        <Route path="/" element={<Catalogue />} />
+        <Route path="/login" element={<LoginPage />} />
+
+        <Route path="/admin" element={<RequireAdmin><Dashboard /></RequireAdmin>} />
+        <Route path="/admin/secteurs/:id" element={<RequireAdmin><SecteurDonnees /></RequireAdmin>} />
+
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
+  );
+}

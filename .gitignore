@@ -1,0 +1,20 @@
+# ── Dépendances ──
+node_modules/
+venv/
+__pycache__/
+*.pyc
+
+# ── Secrets ──
+.env
+.env.local
+*.env.local
+
+# ── Artefacts générés ──
+backend/reports/*.pdf
+frontend/dist/
+*.log
+npm-debug.log*
+
+# ── OS / éditeurs ──
+.DS_Store
+Thumbs.db

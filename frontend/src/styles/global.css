@@ -1,0 +1,222 @@
+/* ==========================================================================
+   InvestPlatform — feuille de style unique.
+   Les composants utilisent des classes plutôt que des objets `style` inline :
+   la charte (couleurs, rayons, ombres) vit à un seul endroit et reste
+   cohérente entre le catalogue public et le panneau admin.
+   ========================================================================== */
+
+:root {
+    --primary: #1d4ed8;
+    --primary-dark: #1e3a8a;
+    --primary-light: #93c5fd;
+    --primary-bg: #eff6ff;
+
+    --green: #059669;
+    --green-bg: #ecfdf5;
+    --red: #dc2626;
+    --red-bg: #fef2f2;
+    --gold: #b45309;
+
+    --text: #111827;
+    --text-muted: #64748b;
+    --text-light: #94a3b8;
+    --border: #e2e8f0;
+    --surface: #f8fafc;
+    --white: #ffffff;
+
+    --radius: 12px;
+    --radius-sm: 8px;
+    --shadow: 0 1px 3px rgba(0, 0, 0, .08);
+    --shadow-lg: 0 10px 30px rgba(0, 0, 0, .12);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--surface);
+    color: var(--text);
+    line-height: 1.55;
+}
+
+a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ── Structure ─────────────────────────────────────────────────────────── */
+
+.page { max-width: 1180px; margin: 0 auto; padding: 24px; }
+.page--narrow { max-width: 760px; }
+
+.navbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 24px;
+    background: var(--white);
+    border-bottom: 1px solid var(--border);
+}
+.navbar__brand { font-weight: 700; font-size: 17px; color: var(--primary-dark); }
+.navbar__brand span { display: block; font-size: 12px; font-weight: 400; color: var(--text-muted); }
+.navbar__links { display: flex; align-items: center; gap: 18px; font-size: 14px; }
+
+.page-header { margin-bottom: 24px; }
+.page-header h1 { font-size: 26px; color: var(--primary-dark); }
+.page-header p { color: var(--text-muted); font-size: 14px; margin-top: 4px; }
+
+.section-title { font-size: 17px; color: var(--primary-dark); margin-bottom: 14px; }
+
+/* ── Cartes ────────────────────────────────────────────────────────────── */
+
+.card {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 20px;
+}
+.card + .card { margin-top: 20px; }
+
+.grid { display: grid; gap: 20px; }
+.grid--sectors { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+.grid--stats { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.grid--form { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+
+/* ── Carte secteur (catalogue) ─────────────────────────────────────────── */
+
+.sector-card { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.sector-card__media {
+    height: 150px;
+    background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+    display: flex; align-items: center; justify-content: center;
+    color: var(--white); font-size: 40px;
+}
+.sector-card__media img { width: 100%; height: 100%; object-fit: cover; }
+.sector-card__body { padding: 18px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.sector-card__title { font-size: 18px; color: var(--primary-dark); }
+.sector-card__desc { color: var(--text-muted); font-size: 14px; flex: 1; }
+.sector-card__meta {
+    display: flex; flex-wrap: wrap; gap: 8px 16px;
+    font-size: 13px; color: var(--text-muted);
+    border-top: 1px solid var(--border); padding-top: 12px;
+}
+.sector-card__price { font-size: 20px; font-weight: 700; color: var(--primary); }
+.sector-card__actions { display: flex; gap: 10px; }
+
+/* ── Boutons ───────────────────────────────────────────────────────────── */
+
+.btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 10px 16px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    font-size: 14px; font-weight: 600;
+    cursor: pointer;
+    transition: filter .15s ease, background .15s ease;
+}
+.btn:hover:not(:disabled) { filter: brightness(.94); }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+.btn--primary { background: var(--primary); color: var(--white); }
+.btn--success { background: var(--green); color: var(--white); }
+.btn--danger { background: var(--red); color: var(--white); }
+.btn--ghost { background: var(--white); color: var(--primary); border-color: var(--primary); }
+.btn--subtle { background: var(--surface); color: var(--text-muted); border-color: var(--border); }
+.btn--block { width: 100%; }
+.btn--sm { padding: 6px 12px; font-size: 13px; }
+
+/* ── Formulaires ───────────────────────────────────────────────────────── */
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; }
+.input, .textarea, .select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    font-family: inherit;
+    background: var(--white);
+    color: var(--text);
+}
+.input:focus, .textarea:focus, .select:focus { outline: 2px solid var(--primary-light); border-color: var(--primary); }
+.textarea { min-height: 72px; resize: vertical; }
+.form-actions { display: flex; gap: 10px; margin-top: 18px; }
+
+/* ── Tableaux ──────────────────────────────────────────────────────────── */
+
+.table-wrapper { overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th {
+    text-align: left; padding: 12px; font-weight: 600;
+    color: var(--text-muted); font-size: 12px; text-transform: uppercase;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+}
+.table td { padding: 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.table tr:last-child td { border-bottom: none; }
+.table__num { text-align: right; font-variant-numeric: tabular-nums; }
+.table__truncate { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Indicateurs ───────────────────────────────────────────────────────── */
+
+.stat { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+.stat__value { font-size: 30px; font-weight: 700; color: var(--primary); line-height: 1.2; }
+.stat__label { color: var(--text-muted); font-size: 13px; margin-top: 4px; }
+
+.badge {
+    display: inline-block; padding: 3px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 600;
+}
+.badge--on { background: var(--green-bg); color: var(--green); }
+.badge--off { background: var(--red-bg); color: var(--red); }
+.badge--info { background: var(--primary-bg); color: var(--primary); }
+
+/* ── Messages ──────────────────────────────────────────────────────────── */
+
+.alert { padding: 12px 14px; border-radius: var(--radius-sm); font-size: 14px; }
+.alert--error { background: var(--red-bg); color: var(--red); }
+.alert--success { background: var(--green-bg); color: var(--green); }
+.alert--info { background: var(--primary-bg); color: var(--primary-dark); }
+
+.empty { padding: 28px; text-align: center; color: var(--text-muted); font-style: italic; }
+.loading { display: flex; align-items: center; justify-content: center; min-height: 60vh; color: var(--text-muted); }
+
+/* ── Barre de progression (CDC §6, étape 3) ────────────────────────────── */
+
+.progress { margin-top: 12px; }
+.progress__track { height: 8px; background: var(--border); border-radius: 999px; overflow: hidden; }
+.progress__bar {
+    height: 100%; background: var(--primary); border-radius: 999px;
+    transition: width .45s ease;
+}
+.progress__label {
+    display: flex; justify-content: space-between; gap: 10px;
+    font-size: 12.5px; color: var(--text-muted); margin-top: 7px;
+}
+
+/* ── Écran de connexion ────────────────────────────────────────────────── */
+
+.login {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 20px;
+    background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+}
+.login__card {
+    width: 100%; max-width: 400px;
+    background: var(--white); border-radius: 16px;
+    box-shadow: var(--shadow-lg); padding: 34px;
+}
+.login__title { text-align: center; color: var(--primary-dark); }
+.login__subtitle { text-align: center; color: var(--text-muted); font-weight: 400; font-size: 15px; margin: 6px 0 22px; }
+.login__form { display: flex; flex-direction: column; gap: 14px; }
+.login__toggle {
+    display: block; width: 100%; margin-top: 16px; text-align: center;
+    background: none; border: none; color: var(--primary); font-size: 14px; cursor: pointer;
+}
+
+/* ── Divers ────────────────────────────────────────────────────────────── */
+
+.muted { color: var(--text-muted); font-size: 13px; }
+.row-between { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.stack { display: flex; flex-direction: column; gap: 12px; }
+.inline-actions { display: flex; gap: 8px; flex-wrap: wrap; }
