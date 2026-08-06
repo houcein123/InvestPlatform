@@ -13,8 +13,13 @@ const express = require("express");
 
 const sectorRepository = require("../services/sectorRepository");
 const salesService = require("../services/salesService");
+const accountRepository = require("../services/accountRepository");
 const reportService = require("../services/reportService");
+const projectionService = require("../services/projectionService");
+const paypalService = require("../services/paypalService");
+const groqService = require("../services/groqService");
 const jobStore = require("../services/jobStore");
+const { config } = require("../config/env");
 const { asyncHandler, HttpError } = require("../middleware/errorHandler");
 
 const router = express.Router();
@@ -133,6 +138,57 @@ router.post("/secteurs/:id/regenerer", asyncHandler(async (req, res) => {
     res.status(202).json({ success: true, jobId, message: "Régénération démarrée" });
 }));
 
+// ── Projections statistiques ───────────────────────────────────────────────
+
+/**
+ * Recalcule les projections d'un secteur à partir de l'historique observé.
+ * Les valeurs produites sont des estimations, marquées comme telles en base
+ * et dans le rapport.
+ */
+router.post("/secteurs/:id/projections", asyncHandler(async (req, res) => {
+    const secteur = await sectorRepository.findSectorById(req.params.id);
+    if (!secteur) throw new HttpError(404, "Secteur non trouvé");
+
+    const resultat = await projectionService.calculerPourSecteur(secteur.id);
+    res.json({ success: true, ...resultat });
+}));
+
+/** Recalcule les projections de tous les secteurs. */
+router.post("/projections", asyncHandler(async (req, res) => {
+    const resultat = await projectionService.calculerPourTous();
+    res.json({ success: true, ...resultat });
+}));
+
+// ── Comptes (CDC §7) ───────────────────────────────────────────────────────
+
+router.get("/comptes", asyncHandler(async (req, res) => {
+    res.json({ comptes: await accountRepository.listAccounts() });
+}));
+
+/**
+ * Change le rôle d'un compte. On refuse de retirer le dernier administrateur
+ * actif : sans lui, plus personne ne pourrait accéder au panneau de contrôle.
+ */
+router.put("/comptes/:id/role", asyncHandler(async (req, res) => {
+    const { role } = req.body;
+    const id = Number(req.params.id);
+
+    if (![accountRepository.ROLE_CLIENT, accountRepository.ROLE_ADMIN].includes(role)) {
+        throw new HttpError(400, "Rôle invalide");
+    }
+
+    const cible = await accountRepository.findById(id);
+    if (!cible) throw new HttpError(404, "Compte non trouvé");
+
+    if (cible.role === accountRepository.ROLE_ADMIN && role === accountRepository.ROLE_CLIENT) {
+        const admins = await accountRepository.countActiveAdmins();
+        if (admins <= 1) throw new HttpError(409, "Impossible de retirer le dernier administrateur");
+        if (id === req.compte.id) throw new HttpError(409, "Vous ne pouvez pas retirer votre propre rôle administrateur");
+    }
+
+    res.json({ compte: await accountRepository.setRole(id, role) });
+}));
+
 // ── Statistiques de vente (CDC §7) ─────────────────────────────────────────
 
 router.get("/stats", asyncHandler(async (req, res) => {
@@ -141,6 +197,30 @@ router.get("/stats", asyncHandler(async (req, res) => {
         salesService.listRecentReports(),
     ]);
     res.json({ ...ventes, rapportsRecents: rapports });
+}));
+
+// ── État des services (page Paramètres) ────────────────────────────────────
+
+router.get("/systeme", asyncHandler(async (req, res) => {
+    const paypal = paypalService.statut();
+    res.json({
+        devise: config.devise,
+        redaction: {
+            configure: groqService.isConfigured,
+            modele: groqService.model,
+        },
+        paiement: {
+            configure: paypal.configure,
+            environnement: paypal.environnement,
+            devisePaiement: paypal.devise,
+            tauxConversion: paypal.tauxTND,
+            argentReel: paypal.argentReel,
+        },
+        rapports: {
+            sections: require("../pdf/sections").SECTION_CATALOG.length,
+            pagesMin: require("../pdf/sections").MIN_PAGE_COUNT,
+        },
+    });
 }));
 
 module.exports = router;

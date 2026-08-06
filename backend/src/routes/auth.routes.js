@@ -1,71 +1,107 @@
 // ============================================================================
-// Authentification administrateur — /api/admin/register | login | me
+// Authentification — /api/auth
+// ----------------------------------------------------------------------------
+// Un seul formulaire de connexion pour tout le monde. L'inscription publique
+// ne crée que des comptes client ; le rôle renvoyé à la connexion indique au
+// frontend s'il doit ouvrir le catalogue ou le panneau de contrôle.
 // ============================================================================
 
 const express = require("express");
-const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
-const { pool } = require("../config/db");
 const { config } = require("../config/env");
-const { verifyAdmin } = require("../middleware/auth");
+const accountRepository = require("../services/accountRepository");
+const { requireAuth } = require("../middleware/auth");
 const { asyncHandler, HttpError } = require("../middleware/errorHandler");
 
 const router = express.Router();
 
-router.post("/register", asyncHandler(async (req, res) => {
-    const { email, mot_de_passe, nom, prenom, role = "admin" } = req.body;
-    if (!email || !mot_de_passe || !nom || !prenom) {
-        throw new HttpError(400, "Tous les champs sont requis");
-    }
-    if (String(mot_de_passe).length < 8) {
-        throw new HttpError(400, "Le mot de passe doit contenir au moins 8 caractères");
-    }
+const LONGUEUR_MIN_MOT_DE_PASSE = 8;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-    const existing = await pool.query("SELECT id FROM admins WHERE email = $1", [email]);
-    if (existing.rows.length > 0) throw new HttpError(409, "Email déjà utilisé");
-
-    const hashed = await bcrypt.hash(mot_de_passe, config.bcryptRounds);
-    const { rows } = await pool.query(
-        `INSERT INTO admins (email, mot_de_passe, nom, prenom, role)
-         VALUES ($1,$2,$3,$4,$5)
-         RETURNING id, email, nom, prenom, role`,
-        [email, hashed, nom, prenom, role]
-    );
-    res.status(201).json({ message: "Admin créé", admin: rows[0] });
-}));
-
-router.post("/login", asyncHandler(async (req, res) => {
-    const { email, mot_de_passe } = req.body;
-    const { rows } = await pool.query("SELECT * FROM admins WHERE email = $1", [email]);
-
-    // Message identique que l'email existe ou non : ne pas révéler quels
-    // comptes sont enregistrés.
-    if (rows.length === 0) throw new HttpError(401, "Email ou mot de passe incorrect");
-
-    const admin = rows[0];
-    if (!admin.est_actif) throw new HttpError(403, "Compte désactivé");
-
-    const valid = await bcrypt.compare(mot_de_passe, admin.mot_de_passe);
-    if (!valid) throw new HttpError(401, "Email ou mot de passe incorrect");
-
-    await pool.query("UPDATE admins SET derniere_connexion = CURRENT_TIMESTAMP WHERE id = $1", [admin.id]);
-
-    const token = jwt.sign(
-        { id: admin.id, email: admin.email, role: admin.role },
+function signerJeton(compte) {
+    return jwt.sign(
+        { id: compte.id, email: compte.email },
         config.jwtSecret,
         { expiresIn: config.jwtExpiresIn }
     );
+}
 
-    res.json({
-        message: "Connexion réussie",
-        token,
-        admin: { id: admin.id, email: admin.email, nom: admin.nom, prenom: admin.prenom, role: admin.role },
+/** Inscription publique — crée un compte client. */
+router.post("/register", asyncHandler(async (req, res) => {
+    const { email, mot_de_passe, nom, prenom, entreprise, pays, telephone } = req.body;
+
+    if (!email || !mot_de_passe || !nom || !prenom) {
+        throw new HttpError(400, "Email, mot de passe, nom et prénom sont requis");
+    }
+    if (!EMAIL_RE.test(email)) {
+        throw new HttpError(400, "Adresse email invalide");
+    }
+    if (String(mot_de_passe).length < LONGUEUR_MIN_MOT_DE_PASSE) {
+        throw new HttpError(400, `Le mot de passe doit contenir au moins ${LONGUEUR_MIN_MOT_DE_PASSE} caractères`);
+    }
+    if (await accountRepository.findByEmail(email)) {
+        throw new HttpError(409, "Un compte existe déjà avec cet email");
+    }
+
+    const compte = await accountRepository.createClient({
+        email, mot_de_passe, nom, prenom, entreprise, pays, telephone,
     });
+
+    // Connexion immédiate : demander de ressaisir ses identifiants juste après
+    // les avoir choisis n'apporte rien.
+    res.status(201).json({ token: signerJeton(compte), compte });
 }));
 
-router.get("/me", verifyAdmin, (req, res) => {
-    res.json({ admin: req.admin });
+/** Connexion — identique pour un client et un administrateur. */
+router.post("/login", asyncHandler(async (req, res) => {
+    const { email, mot_de_passe } = req.body;
+    if (!email || !mot_de_passe) throw new HttpError(400, "Email et mot de passe requis");
+
+    const compte = await accountRepository.findByEmail(email);
+
+    // Message identique que l'email existe ou non : ne pas révéler quels
+    // comptes sont enregistrés.
+    if (!compte) throw new HttpError(401, "Email ou mot de passe incorrect");
+    if (!compte.est_actif) throw new HttpError(403, "Compte désactivé");
+
+    const valide = await accountRepository.verifyPassword(mot_de_passe, compte.mot_de_passe);
+    if (!valide) throw new HttpError(401, "Email ou mot de passe incorrect");
+
+    await accountRepository.touchLogin(compte.id);
+    const profil = await accountRepository.findById(compte.id);
+
+    res.json({ token: signerJeton(profil), compte: profil });
+}));
+
+/** Compte courant — sert à revalider un jeton au chargement du frontend. */
+router.get("/me", requireAuth, (req, res) => {
+    res.json({ compte: req.compte });
 });
+
+/** Mise à jour du profil par son titulaire. */
+router.put("/profil", requireAuth, asyncHandler(async (req, res) => {
+    const compte = await accountRepository.updateProfil(req.compte.id, req.body);
+    res.json({ compte });
+}));
+
+/** Changement de mot de passe — l'actuel est exigé. */
+router.put("/mot-de-passe", requireAuth, asyncHandler(async (req, res) => {
+    const { mot_de_passe_actuel, nouveau_mot_de_passe } = req.body;
+
+    if (!mot_de_passe_actuel || !nouveau_mot_de_passe) {
+        throw new HttpError(400, "Mot de passe actuel et nouveau mot de passe requis");
+    }
+    if (String(nouveau_mot_de_passe).length < LONGUEUR_MIN_MOT_DE_PASSE) {
+        throw new HttpError(400, `Le mot de passe doit contenir au moins ${LONGUEUR_MIN_MOT_DE_PASSE} caractères`);
+    }
+
+    const complet = await accountRepository.findByEmail(req.compte.email);
+    const valide = await accountRepository.verifyPassword(mot_de_passe_actuel, complet.mot_de_passe);
+    if (!valide) throw new HttpError(401, "Mot de passe actuel incorrect");
+
+    await accountRepository.updatePassword(req.compte.id, nouveau_mot_de_passe);
+    res.json({ success: true, message: "Mot de passe mis à jour" });
+}));
 
 module.exports = router;

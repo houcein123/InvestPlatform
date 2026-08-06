@@ -13,6 +13,8 @@ DROP TABLE IF EXISTS paiements CASCADE;
 DROP TABLE IF EXISTS achats CASCADE;
 DROP TABLE IF EXISTS rapports CASCADE;
 DROP TABLE IF EXISTS statistiques_ventes CASCADE;
+-- `admins` a été fusionnée dans `utilisateurs` (migration 002) ; la ligne
+-- reste pour réinitialiser proprement une base créée avant cette fusion.
 DROP TABLE IF EXISTS admins CASCADE;
 DROP TABLE IF EXISTS utilisateurs CASCADE;
 DROP TABLE IF EXISTS cadre_reglementaire CASCADE;
@@ -42,26 +44,37 @@ CREATE TABLE secteurs (
 );
 
 -- 2. Séries temporelles importées des CSV de l'INS
---    Les CSV publiés couvrent aujourd'hui 2015-2023 : valeur_2024 reste donc
---    vide en attendant la publication de l'INS. Le générateur PDF ignore
---    proprement les années sans valeur.
+--
+--    DISTINCTION FONDAMENTALE, respectée partout dans le projet :
+--      valeur_YYYY     → donnée OBSERVÉE, publiée par la source officielle
+--      projection_YYYY → ESTIMATION calculée par projectionService
+--
+--    Les CSV publiés s'arrêtent selon les indicateurs entre 2023 et 2024.
+--    Les années suivantes sont estimées et signalées comme telles dans
+--    l'interface comme dans le rapport PDF.
 CREATE TABLE donnees_statistiques (
-    id              SERIAL PRIMARY KEY,
-    secteur_id      INT NOT NULL REFERENCES secteurs(id) ON DELETE CASCADE,
-    indicateur      VARCHAR(200) NOT NULL,
-    unite           VARCHAR(80),
-    valeur_2020     DECIMAL(15, 2),
-    valeur_2021     DECIMAL(15, 2),
-    valeur_2022     DECIMAL(15, 2),
-    valeur_2023     DECIMAL(15, 2),
-    valeur_2024     DECIMAL(15, 2),
-    projection_2025 DECIMAL(15, 2),
-    projection_2026 DECIMAL(15, 2),
-    projection_2027 DECIMAL(15, 2),
-    projection_2028 DECIMAL(15, 2),
-    source          VARCHAR(255),
-    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    id                       SERIAL PRIMARY KEY,
+    secteur_id               INT NOT NULL REFERENCES secteurs(id) ON DELETE CASCADE,
+    indicateur               VARCHAR(200) NOT NULL,
+    unite                    VARCHAR(80),
+    valeur_2020              DECIMAL(15, 2),
+    valeur_2021              DECIMAL(15, 2),
+    valeur_2022              DECIMAL(15, 2),
+    valeur_2023              DECIMAL(15, 2),
+    valeur_2024              DECIMAL(15, 2),
+    -- projection_2024 ne sert que si valeur_2024 est absente
+    projection_2024          DECIMAL(15, 2),
+    projection_2025          DECIMAL(15, 2),
+    projection_2026          DECIMAL(15, 2),
+    projection_2027          DECIMAL(15, 2),
+    projection_2028          DECIMAL(15, 2),
+    -- Traçabilité du calcul : modèle retenu et qualité de son ajustement
+    methode_projection       VARCHAR(60),
+    fiabilite_r2             DECIMAL(5, 4),
+    projections_calculees_le TIMESTAMP,
+    source                   VARCHAR(255),
+    created_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (secteur_id, indicateur)
 );
 
@@ -129,32 +142,27 @@ CREATE TABLE cadre_reglementaire (
 -- COMPTES
 -- ════════════════════════════════════════════════════════════════════════════
 
--- 7. Clients du service
+-- 7. Comptes — clients ET administrateurs.
+--    Une seule table, un seul parcours de connexion : c'est la colonne `role`
+--    qui décide de ce que la personne voit une fois connectée. L'inscription
+--    publique crée toujours un 'client' ; seul un administrateur peut promouvoir
+--    un compte, ce qui rend l'élévation de privilèges impossible côté public.
 CREATE TABLE utilisateurs (
-    id              SERIAL PRIMARY KEY,
-    email           VARCHAR(255) UNIQUE NOT NULL,
-    mot_de_passe    VARCHAR(255) NOT NULL,
-    nom             VARCHAR(100),
-    prenom          VARCHAR(100),
-    entreprise      VARCHAR(150),
-    pays            VARCHAR(100),
-    telephone       VARCHAR(20),
-    est_verifie     BOOLEAN DEFAULT FALSE,
-    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 8. Administrateurs du back-office
-CREATE TABLE admins (
     id                 SERIAL PRIMARY KEY,
     email              VARCHAR(255) UNIQUE NOT NULL,
     mot_de_passe       VARCHAR(255) NOT NULL,
-    nom                VARCHAR(100) NOT NULL,
-    prenom             VARCHAR(100) NOT NULL,
-    role               VARCHAR(50) DEFAULT 'admin',
-    est_actif          BOOLEAN DEFAULT TRUE,
+    nom                VARCHAR(100),
+    prenom             VARCHAR(100),
+    entreprise         VARCHAR(150),
+    pays               VARCHAR(100),
+    telephone          VARCHAR(20),
+    role               VARCHAR(20) NOT NULL DEFAULT 'client',
+    est_actif          BOOLEAN NOT NULL DEFAULT TRUE,
+    est_verifie        BOOLEAN DEFAULT FALSE,
     derniere_connexion TIMESTAMP,
-    created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT utilisateurs_role_valide CHECK (role IN ('client', 'admin'))
 );
 
 -- ════════════════════════════════════════════════════════════════════════════
@@ -246,6 +254,8 @@ CREATE INDEX idx_paiements_achat      ON paiements(achat_id);
 CREATE INDEX idx_logs_secteur         ON logs_generation(secteur_id);
 CREATE INDEX idx_achats_secteur       ON achats(id_secteur);
 CREATE INDEX idx_achats_date          ON achats(date_achat);
+CREATE INDEX idx_achats_utilisateur   ON achats(id_utilisateur);
+CREATE INDEX idx_utilisateurs_role    ON utilisateurs(role);
 CREATE INDEX idx_stats_ventes_lookup  ON statistiques_ventes(secteur_id, annee, mois);
 
 -- ════════════════════════════════════════════════════════════════════════════

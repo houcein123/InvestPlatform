@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api, fileUrl } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
+import { lirePreferences } from '../preferences';
+import PayPalButton from './PayPalButton';
 import ProgressBar from './ProgressBar';
 
 /** Illustration de repli quand aucune image n'est fournie pour le secteur. */
@@ -17,13 +21,18 @@ const POLL_INTERVAL_MS = 1200;
 function formatDate(valeur) {
   if (!valeur) return '—';
   const date = new Date(valeur);
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('fr-FR');
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('fr-FR', {
+    day: 'numeric', month: 'long', year: 'numeric',
+  });
 }
 
-export default function SectorCard({ sector }) {
-  const [etat, setEtat] = useState('pret'); // pret | achat | generation | termine | erreur
+export default function SectorCard({ sector, paypalConfig }) {
+  const { estConnecte } = useAuth();
+  const preferences = lirePreferences();
+
+  const [etape, setEtape] = useState('repos'); // repos | paiement | generation | termine | erreur
   const [message, setMessage] = useState('');
-  const [progression, setProgression] = useState({ valeur: 0, etape: '' });
+  const [progression, setProgression] = useState({ valeur: 0, libelle: '' });
   const [pdfUrl, setPdfUrl] = useState(null);
   const [imageOk, setImageOk] = useState(true);
 
@@ -34,6 +43,10 @@ export default function SectorCard({ sector }) {
 
   const ouvrirApercu = () => window.open(api.previewUrl(sector.id), '_blank', 'noopener');
 
+  const equivalentPaiement = paypalConfig?.tauxConversion
+    ? (Number(sector.prix_rapport) * paypalConfig.tauxConversion).toFixed(2)
+    : null;
+
   /** Interroge le backend jusqu'à ce que le job soit terminé ou en erreur. */
   const suivreJob = async (jobId) => {
     while (monte.current) {
@@ -41,7 +54,7 @@ export default function SectorCard({ sector }) {
       if (!monte.current) return null;
 
       const { job } = await api.reportStatus(jobId);
-      setProgression({ valeur: job.progression, etape: job.etape });
+      setProgression({ valeur: job.progression, libelle: job.etape });
 
       if (job.statut === 'termine') return job;
       if (job.statut === 'erreur') throw new Error(job.erreur || 'Génération interrompue');
@@ -49,95 +62,107 @@ export default function SectorCard({ sector }) {
     return null;
   };
 
-  const acheter = async () => {
-    setEtat('achat');
-    setPdfUrl(null);
-    setMessage('Création de la commande…');
+  const lancerGeneration = async ({ achatId }) => {
+    setEtape('generation');
+    setMessage('');
+    setProgression({ valeur: 0, libelle: 'Préparation des données sectorielles' });
 
     try {
-      // 1. Commande + 2. Paiement (PayPal simulé côté backend)
-      const commande = await api.createOrder(sector.id);
-      setMessage(`Paiement de ${commande.montant} ${commande.devise}…`);
-      await api.capturePayment(commande.achatId);
-
-      // 3. Génération suivie par la barre de progression
-      setEtat('generation');
-      setMessage('');
-      setProgression({ valeur: 0, etape: 'Préparation des données sectorielles' });
-
-      const { jobId } = await api.generateReport(sector.id, commande.achatId);
+      const { jobId } = await api.generateReport(sector.id, achatId);
       const job = await suivreJob(jobId);
       if (!job) return;
 
-      // 4. Téléchargement
-      setEtat('termine');
+      setEtape('termine');
       setPdfUrl(fileUrl(job.pdfUrl));
       setMessage(
         job.sectionsManquantes?.length
-          ? `Rapport prêt — ${job.sectionsManquantes.length} section(s) d'analyse IA indisponible(s).`
+          ? `Rapport prêt — ${job.sectionsManquantes.length} section(s) indisponible(s).`
           : 'Rapport prêt.'
       );
-      window.open(fileUrl(job.pdfUrl), '_blank', 'noopener');
+      if (preferences.ouvrirPdfAutomatiquement) {
+        window.open(fileUrl(job.pdfUrl), '_blank', 'noopener');
+      }
     } catch (err) {
       if (!monte.current) return;
-      setEtat('erreur');
+      setEtape('erreur');
       setMessage(err.message);
     }
   };
 
-  const occupe = etat === 'achat' || etat === 'generation';
+  const occupe = etape === 'paiement' || etape === 'generation';
 
   return (
-    <article className="card sector-card">
+    <article className="sector-card">
       <div className="sector-card__media">
         {imageOk ? (
-          <img
-            src={`/images/${sector.slug}.jpeg`}
-            alt={sector.nom}
-            onError={() => setImageOk(false)}
-          />
+          <img src={`/images/${sector.slug}.jpeg`} alt="" onError={() => setImageOk(false)} />
         ) : (
-          <span aria-hidden="true">{ICONES[sector.slug] || '📊'}</span>
+          <span className="sector-card__embleme" aria-hidden="true">{ICONES[sector.slug] || '📊'}</span>
         )}
+        <span className="sector-card__etiquette">Rapport sectoriel</span>
       </div>
 
       <div className="sector-card__body">
-        <h2 className="sector-card__title">{sector.nom}</h2>
+        <h3 className="sector-card__title">{sector.nom}</h3>
         <p className="sector-card__desc">{sector.description}</p>
 
-        <div className="sector-card__meta">
-          <span>📄 {sector.nombre_pages} pages</span>
-          <span>📅 Mis à jour le {formatDate(sector.date_maj)}</span>
+        <dl className="sector-card__meta">
+          <div>
+            <dt>Volume</dt>
+            <dd>≈ {sector.nombre_pages} pages</dd>
+          </div>
+          <div>
+            <dt>Mise à jour</dt>
+            <dd>{formatDate(sector.date_maj)}</dd>
+          </div>
+        </dl>
+
+        <div className="sector-card__tarif">
+          <div>
+            <span className="sector-card__price">{Number(sector.prix_rapport).toFixed(2)}</span>
+            <span className="sector-card__devise">TND</span>
+          </div>
+          {equivalentPaiement && (
+            <span className="muted">≈ {equivalentPaiement} {paypalConfig.devisePaiement} à l'encaissement</span>
+          )}
         </div>
 
-        <div className="row-between">
-          <span className="sector-card__price">{sector.prix_rapport} TND</span>
-          {etat === 'termine' && <span className="badge badge--on">Acheté</span>}
-        </div>
-
-        {etat === 'generation' && (
-          <ProgressBar progression={progression.valeur} etape={progression.etape} />
+        {etape === 'generation' && (
+          <ProgressBar progression={progression.valeur} etape={progression.libelle} />
         )}
 
         {message && (
-          <p className={`alert alert--${etat === 'erreur' ? 'error' : etat === 'termine' ? 'success' : 'info'}`}>
+          <p className={`alert alert--${etape === 'erreur' ? 'error' : etape === 'termine' ? 'success' : 'info'}`}>
             {message}
           </p>
         )}
 
         {pdfUrl && (
-          <a className="btn btn--ghost btn--block" href={pdfUrl} target="_blank" rel="noreferrer">
-            ⬇️ Retélécharger le PDF
+          <a className="btn btn--success btn--block" href={pdfUrl} target="_blank" rel="noreferrer">
+            Télécharger le rapport
           </a>
         )}
 
         <div className="sector-card__actions">
-          <button type="button" className="btn btn--ghost" onClick={ouvrirApercu} disabled={occupe}>
-            👁️ Aperçu gratuit
+          <button type="button" className="btn btn--ghost btn--block" onClick={ouvrirApercu} disabled={occupe}>
+            Lire l'aperçu gratuit
           </button>
-          <button type="button" className="btn btn--success" onClick={acheter} disabled={occupe}>
-            {occupe ? '⏳ Traitement…' : '🛒 Acheter le rapport'}
-          </button>
+
+          {etape !== 'termine' && (
+            estConnecte ? (
+              <PayPalButton
+                config={paypalConfig}
+                sectorId={sector.id}
+                desactive={occupe}
+                onPaiementConfirme={lancerGeneration}
+                onErreur={(texte) => { setEtape('erreur'); setMessage(texte); }}
+              />
+            ) : (
+              <Link to="/login" className="btn btn--primary btn--block">
+                Se connecter pour acheter
+              </Link>
+            )
+          )}
         </div>
       </div>
     </article>

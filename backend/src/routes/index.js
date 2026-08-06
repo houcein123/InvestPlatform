@@ -4,7 +4,7 @@
 
 const express = require("express");
 
-const { verifyAdmin } = require("../middleware/auth");
+const { requireAdmin } = require("../middleware/auth");
 const authRoutes = require("./auth.routes");
 const catalogueRoutes = require("./catalogue.routes");
 const paymentRoutes = require("./payment.routes");
@@ -15,14 +15,15 @@ const router = express.Router();
 
 router.get("/health", (req, res) => res.json({ status: "ok", service: "InvestPlatform API" }));
 
-// Public
+// Comptes — inscription publique (client), connexion commune, profil
+router.use("/auth", authRoutes);
+
+// Public / client
 router.use("/catalogue", catalogueRoutes);
 router.use("/payment", paymentRoutes);
 router.use("/report", reportRoutes);
 
-// Admin — l'ordre compte : /register, /login et /me sont publics ou
-// auto-protégés ; tout le reste de /admin passe par verifyAdmin.
-router.use("/admin", authRoutes);
-router.use("/admin", verifyAdmin, adminRoutes);
+// Panneau de contrôle — réservé au rôle « admin »
+router.use("/admin", requireAdmin, adminRoutes);
 
 module.exports = router;

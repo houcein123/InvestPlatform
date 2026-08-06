@@ -40,6 +40,7 @@ export default function SecteurDonnees() {
 
   const [regeneration, setRegeneration] = useState(null); // { valeur, etape } | null
   const [pdfUrl, setPdfUrl] = useState(null);
+  const [projectionEnCours, setProjectionEnCours] = useState(false);
 
   const monte = useRef(true);
   useEffect(() => () => { monte.current = false; }, []);
@@ -94,6 +95,29 @@ export default function SecteurDonnees() {
     }
   };
 
+  /**
+   * Recalcule les estimations à partir de l'historique observé.
+   * À lancer après toute mise à jour des séries statistiques, sinon les
+   * projections affichées dans le rapport reposent sur d'anciennes données.
+   */
+  const recalculerProjections = async () => {
+    setErreur('');
+    setInfo('');
+    setProjectionEnCours(true);
+    try {
+      const resultat = await api.recalculerProjections(id);
+      await recharger();
+      setInfo(
+        `${resultat.projetees} série(s) projetée(s) sur ${resultat.total}. `
+        + `${resultat.ignorees} série(s) sans modèle fiable restent sans estimation.`
+      );
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setProjectionEnCours(false);
+    }
+  };
+
   const regenerer = async () => {
     setErreur('');
     setInfo('');
@@ -140,7 +164,7 @@ export default function SecteurDonnees() {
       {erreur && <p className="alert alert--error">{erreur}</p>}
       {info && <p className="alert alert--success">{info}</p>}
 
-      {/* ── Régénération ── */}
+      {/* ── Régénération et projections ── */}
       <div className="card">
         <div className="row-between">
           <div>
@@ -150,15 +174,20 @@ export default function SecteurDonnees() {
               {acteursPrincipaux.length} acteurs · {cadreReglementaire.length} textes réglementaires
             </p>
           </div>
-          <button type="button" className="btn btn--primary" onClick={regenerer} disabled={!!regeneration}>
-            {regeneration ? '⏳ Régénération…' : '🔄 Régénérer le rapport'}
-          </button>
+          <div className="inline-actions">
+            <button type="button" className="btn btn--ghost" onClick={recalculerProjections} disabled={projectionEnCours}>
+              {projectionEnCours ? 'Calcul…' : 'Recalculer les projections'}
+            </button>
+            <button type="button" className="btn btn--primary" onClick={regenerer} disabled={!!regeneration}>
+              {regeneration ? 'Régénération…' : 'Régénérer le rapport'}
+            </button>
+          </div>
         </div>
 
         {regeneration && <ProgressBar progression={regeneration.valeur} etape={regeneration.etape} />}
         {pdfUrl && (
           <p style={{ marginTop: 12 }}>
-            <a href={pdfUrl} target="_blank" rel="noreferrer">⬇️ Ouvrir le rapport régénéré</a>
+            <a href={pdfUrl} target="_blank" rel="noreferrer">Ouvrir le rapport régénéré</a>
           </p>
         )}
       </div>
@@ -260,11 +289,13 @@ export default function SecteurDonnees() {
 
       {/* ── Séries statistiques (lecture seule) ── */}
       <div className="card">
-        <h2 className="section-title">Séries statistiques importées ({donneesStatistiques.length})</h2>
+        <h2 className="section-title">Séries statistiques ({donneesStatistiques.length})</h2>
         <p className="muted" style={{ marginBottom: 12 }}>
           Importées depuis les CSV de l'INS via <code>sql/setup_database.py --import-csv</code>.
+          Les colonnes <span className="estimation">en bleu</span> sont des estimations calculées,
+          jamais des valeurs publiées.
         </p>
-        <div className="table-wrapper" style={{ maxHeight: 320, overflowY: 'auto' }}>
+        <div className="table-wrapper" style={{ maxHeight: 360, overflowY: 'auto' }}>
           <table className="table">
             <thead>
               <tr>
@@ -273,6 +304,8 @@ export default function SecteurDonnees() {
                 <th className="table__num">2022</th>
                 <th className="table__num">2023</th>
                 <th className="table__num">2024</th>
+                <th className="table__num">Est. 2028</th>
+                <th>Modèle</th>
               </tr>
             </thead>
             <tbody>
@@ -282,7 +315,23 @@ export default function SecteurDonnees() {
                   <td className="muted">{ligne.unite || '—'}</td>
                   <td className="table__num">{ligne.valeur_2022 ?? '—'}</td>
                   <td className="table__num">{ligne.valeur_2023 ?? '—'}</td>
-                  <td className="table__num">{ligne.valeur_2024 ?? '—'}</td>
+                  <td className="table__num">
+                    {ligne.valeur_2024 ?? (
+                      ligne.projection_2024
+                        ? <span className="estimation">{ligne.projection_2024}</span>
+                        : '—'
+                    )}
+                  </td>
+                  <td className="table__num">
+                    {ligne.projection_2028
+                      ? <span className="estimation">{ligne.projection_2028}</span>
+                      : '—'}
+                  </td>
+                  <td className="muted">
+                    {ligne.methode_projection
+                      ? `${ligne.methode_projection.replace(/_/g, ' ')}${ligne.fiabilite_r2 ? ` (R² ${Number(ligne.fiabilite_r2).toFixed(2)})` : ''}`
+                      : '—'}
+                  </td>
                 </tr>
               ))}
             </tbody>

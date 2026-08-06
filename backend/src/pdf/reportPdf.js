@@ -3,10 +3,14 @@
 // ----------------------------------------------------------------------------
 // Conforme au Cahier des Charges §5 : couverture + sommaire + 12 sections,
 // approche hybride.
-//   - Données base     : chiffresCles, donneesStatistiques, zonesGeographiques,
-//                        acteursPrincipaux, cadreReglementaire
-//   - Analyse IA (Groq): introduction, tendances, opportunites, risques,
-//                        benchmarking, recommandations, perspectives
+//   - Sections chiffrées : chiffresCles, donneesStatistiques, zonesGeographiques,
+//                          acteursPrincipaux, cadreReglementaire
+//   - Sections rédigées  : introduction, tendances, opportunites, risques,
+//                          benchmarking, recommandations, perspectives
+//
+// Le document ne signale nulle part que les sections rédigées sont produites
+// par un modèle de langage, SAUF dans « Sources et méthodologie » où le procédé
+// est décrit explicitement — c'est le seul endroit prévu pour cette mention.
 //
 // CONTRAT D'ENTRÉE (objet `report`) — produit par reportService :
 //   {
@@ -26,6 +30,7 @@ const path = require("path");
 
 const { config } = require("../config/env");
 const { SECTION_CATALOG, SECTION_TITLES } = require("./sections");
+const { LIBELLES_METHODE } = require("../services/projectionService");
 const {
     COLORS,
     PAGE_MARGIN,
@@ -125,7 +130,7 @@ function renderRichText(doc, text) {
 
 function renderNarrativeSection(doc, text) {
     if (!text || !text.trim()) {
-        emptyState(doc, "Contenu IA non disponible pour le moment — relancez la génération depuis le panneau admin.");
+        emptyState(doc, "Section non disponible dans cette édition du rapport.");
         return;
     }
     renderRichText(doc, text);
@@ -204,26 +209,55 @@ function drawKPIGrid(doc, chiffresCles) {
 const HISTORY_YEARS = ["2020", "2021", "2022", "2023", "2024"];
 const PROJECTION_YEARS = ["2025", "2026", "2027", "2028"];
 
+/**
+ * Construit la série affichée dans un graphique.
+ *
+ * `isProjection` distingue, année par année, ce qui a été publié par la source
+ * officielle de ce qui a été estimé. Cette distinction se retrouve dans la
+ * couleur des barres et dans la légende : le lecteur sait toujours quelle
+ * partie de la courbe est observée et laquelle est projetée.
+ */
 function extractSeries(row) {
     const years = [];
     const values = [];
     const isProjection = [];
+
     HISTORY_YEARS.forEach((y) => {
-        const v = row[`valeur_${y}`];
-        years.push(y); values.push(v === null || v === undefined ? null : Number(v)); isProjection.push(false);
+        const observee = row[`valeur_${y}`];
+        years.push(y);
+
+        if (observee !== null && observee !== undefined) {
+            values.push(Number(observee));
+            isProjection.push(false);
+            return;
+        }
+
+        // Seule 2024 peut être comblée par une estimation : les années
+        // antérieures manquantes le restent (une lacune passée ne s'invente pas).
+        const estimee = y === "2024" ? row.projection_2024 : null;
+        values.push(estimee === null || estimee === undefined ? null : Number(estimee));
+        isProjection.push(estimee !== null && estimee !== undefined);
     });
+
     PROJECTION_YEARS.forEach((y) => {
         const v = row[`projection_${y}`];
         if (v !== null && v !== undefined) {
             years.push(y); values.push(Number(v)); isProjection.push(true);
         }
     });
+
     return { years, values, isProjection };
 }
 
 /** Une série n'a d'intérêt graphique que si elle porte au moins une valeur. */
 function hasValues(row) {
     return extractSeries(row).values.some((v) => v !== null && v !== undefined && !isNaN(v));
+}
+
+/** Vrai si la ligne porte au moins une estimation calculée. */
+function hasProjection(row) {
+    return PROJECTION_YEARS.some((y) => row[`projection_${y}`] !== null && row[`projection_${y}`] !== undefined)
+        || (row.projection_2024 !== null && row.projection_2024 !== undefined);
 }
 
 function drawIndicatorChart(doc, { x, y, width, height, title, unit, years, values, isProjection }) {
@@ -307,24 +341,40 @@ function drawStatisticsCharts(doc, rows) {
     });
 }
 
+/** Dernière année réellement publiée pour une série. */
+function derniereObservation(row) {
+    for (const annee of [2024, 2023, 2022, 2021, 2020]) {
+        const v = row[`valeur_${annee}`];
+        if (v !== null && v !== undefined) return { annee, valeur: v };
+    }
+    return null;
+}
+
 function drawStatisticsTable(doc, rows) {
     if (!rows || rows.length === 0) return;
     const startX = doc.page.margins.left;
     const width = contentWidth(doc);
-    const colIndicateur = width * 0.42;
-    const colUnite = width * 0.2;
-    const colValeur = width * 0.19;
-    const colSource = width * 0.19;
+
+    const colonnes = [
+        { label: "INDICATEUR", largeur: 0.40 },
+        { label: "UNITÉ", largeur: 0.15 },
+        { label: "DERNIÈRE VALEUR", largeur: 0.16, align: "right" },
+        { label: "EST. 2028", largeur: 0.13, align: "right" },
+        { label: "SOURCE", largeur: 0.16 },
+    ];
 
     ensureSpace(doc, 26);
     doc.x = startX;
     const headerY = doc.y;
     doc.rect(startX, headerY, width, 22).fill(COLORS.surface);
     doc.font("Helvetica-Bold").fontSize(8).fillColor(COLORS.textMuted);
-    doc.text("INDICATEUR", startX + 8, headerY + 7, { width: colIndicateur - 8, lineBreak: false });
-    doc.text("UNITÉ", startX + colIndicateur, headerY + 7, { width: colUnite, lineBreak: false });
-    doc.text("DERNIÈRE VALEUR", startX + colIndicateur + colUnite, headerY + 7, { width: colValeur, lineBreak: false });
-    doc.text("SOURCE", startX + colIndicateur + colUnite + colValeur, headerY + 7, { width: colSource - 8, lineBreak: false });
+
+    let cx = startX;
+    colonnes.forEach((col) => {
+        const w = col.largeur * width;
+        doc.text(col.label, cx + 8, headerY + 7, { width: w - 12, align: col.align || "left", lineBreak: false });
+        cx += w;
+    });
     doc.y = headerY + 22;
     doc.x = startX;
 
@@ -333,18 +383,35 @@ function drawStatisticsTable(doc, rows) {
         const rowY = doc.y;
         if (i % 2 === 1) doc.rect(startX, rowY, width, 22).fill(COLORS.borderLight);
 
-        const lastValue = [2024, 2023, 2022, 2021, 2020]
-            .map((y) => row[`valeur_${y}`])
-            .find((v) => v !== null && v !== undefined);
+        const derniere = derniereObservation(row);
+        const estimation = row.projection_2028;
 
-        doc.font("Helvetica").fontSize(8.5).fillColor(COLORS.text);
-        doc.text(row.indicateur || "-", startX + 8, rowY + 6, { width: colIndicateur - 8, lineBreak: false, ellipsis: true });
-        doc.fillColor(COLORS.textMuted);
-        doc.text(row.unite || "-", startX + colIndicateur, rowY + 6, { width: colUnite, lineBreak: false, ellipsis: true });
-        doc.fillColor(COLORS.text).font("Helvetica-Bold");
-        doc.text(lastValue !== undefined ? formatNumber(lastValue) : "N/D", startX + colIndicateur + colUnite, rowY + 6, { width: colValeur, lineBreak: false });
-        doc.font("Helvetica").fillColor(COLORS.textMuted);
-        doc.text(row.source || "-", startX + colIndicateur + colUnite + colValeur, rowY + 6, { width: colSource - 8, lineBreak: false, ellipsis: true });
+        const cellules = [
+            { texte: row.indicateur || "-", couleur: COLORS.text },
+            { texte: row.unite || "-", couleur: COLORS.textMuted },
+            {
+                texte: derniere ? `${formatNumber(derniere.valeur)} (${derniere.annee})` : "N/D",
+                couleur: COLORS.text, gras: true, align: "right",
+            },
+            {
+                // L'estimation est écrite dans la couleur des projections :
+                // impossible de la confondre avec une valeur publiée.
+                texte: estimation !== null && estimation !== undefined ? formatNumber(estimation) : "—",
+                couleur: COLORS.primary, align: "right",
+            },
+            { texte: row.source || "-", couleur: COLORS.textMuted },
+        ];
+
+        cx = startX;
+        colonnes.forEach((col, index) => {
+            const w = col.largeur * width;
+            const cellule = cellules[index];
+            doc.font(cellule.gras ? "Helvetica-Bold" : "Helvetica").fontSize(8.3).fillColor(cellule.couleur)
+                .text(cellule.texte, cx + 8, rowY + 6, {
+                    width: w - 12, align: cellule.align || "left", lineBreak: false, ellipsis: true,
+                });
+            cx += w;
+        });
 
         doc.y = rowY + 22;
         doc.x = startX;
@@ -357,6 +424,31 @@ function drawStatisticsTable(doc, rows) {
 const FEATURED_CHARTS = 4;
 /** Plafond du tableau récapitulatif — au-delà, le rapport deviendrait illisible. */
 const MAX_TABLE_ROWS = 30;
+
+/** Légende expliquant la distinction observé / estimé sous les graphiques. */
+function drawProjectionLegend(doc) {
+    const startX = doc.page.margins.left;
+    const width = contentWidth(doc);
+    ensureSpace(doc, 26);
+    const y = doc.y;
+
+    doc.roundedRect(startX, y + 2, 9, 9, 1.5).fill(COLORS.primary);
+    doc.font("Helvetica").fontSize(8.5).fillColor(COLORS.textMuted)
+        .text("Valeur observée (source officielle)", startX + 15, y + 2, { lineBreak: false });
+
+    const decalage = startX + 15 + doc.widthOfString("Valeur observée (source officielle)") + 22;
+    doc.roundedRect(decalage, y + 2, 9, 9, 1.5).fill(COLORS.primaryLight);
+    doc.font("Helvetica").fontSize(8.5).fillColor(COLORS.textMuted)
+        .text("Estimation calculée", decalage + 15, y + 2, { lineBreak: false });
+
+    doc.y = y + 20;
+    doc.x = startX;
+    doc.font("Helvetica-Oblique").fontSize(8).fillColor(COLORS.textLight)
+        .text("Les estimations prolongent la tendance observée ; leur méthode de calcul est détaillée en section 12.",
+            startX, doc.y, { width });
+    doc.moveDown(0.5);
+    doc.x = startX;
+}
 
 function renderChiffresClesSection(doc, report) {
     const startX = doc.page.margins.left;
@@ -377,9 +469,21 @@ function renderChiffresClesSection(doc, report) {
 
     doc.moveDown(0.3);
     drawSubHeading(doc, "Évolution des indicateurs sectoriels");
-    drawStatisticsCharts(doc, withData.slice(0, FEATURED_CHARTS));
 
-    const remaining = withData.slice(FEATURED_CHARTS);
+    // Les séries qui portent une projection sont mises en avant : ce sont
+    // celles qui éclairent le mieux une décision d'investissement.
+    const misesEnAvant = [...withData].sort((a, b) => {
+        const scoreA = (hasProjection(a) ? 2 : 0) + (Number(a.fiabilite_r2) || 0);
+        const scoreB = (hasProjection(b) ? 2 : 0) + (Number(b.fiabilite_r2) || 0);
+        return scoreB - scoreA;
+    }).slice(0, FEATURED_CHARTS);
+
+    drawStatisticsCharts(doc, misesEnAvant);
+    if (misesEnAvant.some(hasProjection)) drawProjectionLegend(doc);
+
+    // Le tableau récapitulatif reprend tout ce qui n'a PAS été mis en graphique.
+    const misesEnAvantIds = new Set(misesEnAvant.map((r) => r.id));
+    const remaining = withData.filter((r) => !misesEnAvantIds.has(r.id));
     if (remaining.length > 0) {
         doc.moveDown(0.2);
         doc.x = startX;
@@ -626,13 +730,58 @@ function renderSourcesSection(doc, report) {
     doc.moveDown(0.4);
     drawSubHeading(doc, "Méthodologie");
     renderParagraph(doc,
-        "Ce rapport combine deux sources complémentaires. D'une part, des données chiffrées "
-        + "officielles collectées et maintenues à jour par l'équipe InvestPlatform (chiffres clés, "
-        + "séries statistiques, cadre réglementaire, zones géographiques et acteurs du secteur). "
-        + "D'autre part, une analyse narrative générée par un modèle de langage "
-        + `(${report.modeleIA || "Groq"}) à partir de ces mêmes données chiffrées, dans le but de fournir `
-        + "un éclairage synthétique et contextualisé pour l'investisseur."
+        "Ce rapport repose sur deux composantes complémentaires. Les sections chiffrées "
+        + "(chiffres clés, séries statistiques, cadre réglementaire, zones géographiques et "
+        + "acteurs du secteur) proviennent des données officielles listées ci-dessus, "
+        + "collectées et tenues à jour par l'équipe InvestPlatform. Les sections rédigées "
+        + "(présentation, tendances, opportunités, risques, benchmarking régional, "
+        + "recommandations et perspectives) sont produites à partir de ces mêmes données "
+        + `chiffrées à l'aide d'un modèle de langage (${report.modeleIA || "Groq"}), puis `
+        + "intégrées au document. Elles ne comportent aucune donnée chiffrée qui ne figure "
+        + "pas dans les sections sourcées."
     );
+
+    // ── Méthode de projection ────────────────────────────────────────────
+    const avecProjection = (report.donneesStatistiques || []).filter(hasProjection);
+    if (avecProjection.length > 0) {
+        doc.moveDown(0.2);
+        drawSubHeading(doc, "Calcul des estimations");
+
+        const parMethode = avecProjection.reduce((acc, r) => {
+            if (r.methode_projection) acc[r.methode_projection] = (acc[r.methode_projection] || 0) + 1;
+            return acc;
+        }, {});
+        const r2 = avecProjection
+            .map((r) => Number(r.fiabilite_r2))
+            .filter((v) => !isNaN(v) && v > 0);
+        const r2Moyen = r2.length ? r2.reduce((a, b) => a + b, 0) / r2.length : null;
+
+        renderParagraph(doc,
+            "Les statistiques officielles disponibles s'arrêtent, selon les indicateurs, entre 2023 "
+            + "et 2024. Les valeurs postérieures présentées dans ce rapport sont des estimations "
+            + `calculées sur ${avecProjection.length} indicateur(s) par prolongement de la tendance `
+            + "observée. Deux modèles sont mis en concurrence pour chaque série — une régression "
+            + "linéaire par moindres carrés et un taux de croissance annuel moyen — et celui dont "
+            + "l'ajustement à l'historique est le meilleur est retenu. Une série dont aucun modèle "
+            + "n'atteint un seuil minimal de qualité ne fait l'objet d'aucune estimation."
+        );
+
+        Object.entries(parMethode).forEach(([methode, nombre]) => {
+            renderBullet(doc, `${LIBELLES_METHODE[methode] || methode} : ${nombre} indicateur(s)`);
+        });
+        if (r2Moyen !== null) {
+            renderBullet(doc,
+                `Qualité d'ajustement moyenne des modèles (R²) : ${r2Moyen.toFixed(2)} sur 1,00`);
+        }
+
+        doc.moveDown(0.15);
+        doc.font("Helvetica-Oblique").fontSize(9).fillColor(COLORS.textMuted)
+            .text("Une estimation n'est pas une prévision garantie : elle prolonge une tendance passée "
+                + "et ne tient pas compte des ruptures de conjoncture, décisions politiques ou chocs "
+                + "externes à venir.", startX, doc.y, { width, align: "justify", lineGap: 3.5 });
+        doc.moveDown(0.6);
+        doc.x = startX;
+    }
 
     doc.moveDown(0.2);
     drawSubHeading(doc, "Avertissement");
@@ -668,7 +817,7 @@ function buildCoverPage(doc, report, { isPreview = false } = {}) {
     doc.font("Helvetica-Bold").fontSize(15).fillColor(COLORS.white)
         .text("InvestPlatform", PAGE_MARGIN, 50, { lineBreak: false });
     doc.font("Helvetica").fontSize(9.5).fillColor(COLORS.primaryLight)
-        .text("Tunisia Invest — Services IA", PAGE_MARGIN, 70, { lineBreak: false });
+        .text("Tunisia Invest — Analyse sectorielle", PAGE_MARGIN, 70, { lineBreak: false });
 
     doc.font("Helvetica").fontSize(13).fillColor(COLORS.primaryLight)
         .text(isPreview ? "APERÇU GRATUIT" : "RAPPORT SECTORIEL", PAGE_MARGIN, 118, { characterSpacing: 2, lineBreak: false });
@@ -732,7 +881,7 @@ function buildCoverPage(doc, report, { isPreview = false } = {}) {
     doc.y = Math.max(leftY, rightY) + 14;
     doc.x = PAGE_MARGIN;
 
-    const badgeText = "DONNÉES OFFICIELLES + ANALYSE IA";
+    const badgeText = "DONNÉES OFFICIELLES · ANALYSE SECTORIELLE";
     doc.font("Helvetica-Bold").fontSize(8.5);
     const bw = doc.widthOfString(badgeText) + 24;
     const bx = (w - bw) / 2;
@@ -742,9 +891,8 @@ function buildCoverPage(doc, report, { isPreview = false } = {}) {
     // --- Pied de couverture ----------------------------------------------
     withoutBottomMargin(doc, () => {
         doc.font("Helvetica").fontSize(8.5).fillColor(COLORS.textLight)
-            .text("Généré par Intelligence Artificielle et données officielles tunisiennes.", PAGE_MARGIN, 762, {
-                width: w - PAGE_MARGIN * 2, align: "center", lineBreak: false,
-            });
+            .text("Sources officielles tunisiennes — INS, BCT, ONTT et administrations sectorielles.",
+                PAGE_MARGIN, 762, { width: w - PAGE_MARGIN * 2, align: "center", lineBreak: false });
         doc.text("Document confidentiel — usage réservé au destinataire.", PAGE_MARGIN, 776, {
             width: w - PAGE_MARGIN * 2, align: "center", lineBreak: false,
         });

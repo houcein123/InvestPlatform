@@ -9,27 +9,28 @@
 // Toute section ajoutée ici apparaît partout, et il devient impossible que le
 // sommaire annonce une section qui n'est pas réellement produite.
 //
-// `source` indique l'origine du contenu au sens du CDC §5 :
-//   "ia"   → texte narratif produit par Groq (clé = clé de promptService)
-//   "data" → contenu construit à partir des tables métier
+// `source` indique la nature du contenu au sens du CDC §5 :
+//   "analyse" → section rédigée (le moyen de rédaction est documenté
+//               uniquement dans « Sources et méthodologie »)
+//   "data"    → contenu construit à partir des tables métier
 // ============================================================================
 
-const { AI_BADGE, DATA_BADGE } = require("./theme");
+const { ANALYSE_BADGE, DATA_BADGE } = require("./theme");
 
 const SECTION_CATALOG = [
-    { key: "introduction", title: "Présentation générale du secteur", source: "ia" },
+    { key: "introduction", title: "Présentation générale du secteur", source: "analyse" },
     { key: "chiffres", title: "Chiffres clés et graphiques", source: "data" },
-    { key: "tendances", title: "Analyse des tendances", source: "ia" },
+    { key: "tendances", title: "Analyse des tendances", source: "analyse" },
     { key: "acteurs", title: "Acteurs principaux", source: "data" },
     { key: "cadre", title: "Cadre réglementaire et fiscal", source: "data" },
     { key: "zones", title: "Zones géographiques et zones franches", source: "data" },
-    { key: "opportunites", title: "Opportunités identifiées", source: "ia" },
-    { key: "risques", title: "Analyse des risques", source: "ia" },
-    { key: "benchmarking", title: "Benchmarking régional", source: "ia" },
-    { key: "recommandations", title: "Recommandations investisseur", source: "ia" },
-    { key: "perspectives", title: "Perspectives 2025-2028", source: "ia" },
+    { key: "opportunites", title: "Opportunités identifiées", source: "analyse" },
+    { key: "risques", title: "Analyse des risques", source: "analyse" },
+    { key: "benchmarking", title: "Benchmarking régional", source: "analyse" },
+    { key: "recommandations", title: "Recommandations investisseur", source: "analyse" },
+    { key: "perspectives", title: "Perspectives 2025-2028", source: "analyse" },
     { key: "sources", title: "Sources et méthodologie", source: "data" },
-].map((s) => ({ ...s, badge: s.source === "ia" ? AI_BADGE : DATA_BADGE }));
+].map((s) => ({ ...s, badge: s.source === "analyse" ? ANALYSE_BADGE : DATA_BADGE }));
 
 const SECTION_TITLES = SECTION_CATALOG.map((s) => s.title);
 

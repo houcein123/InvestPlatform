@@ -32,7 +32,11 @@ const COLORS = {
 
 const PAGE_MARGIN = 60;
 
-const AI_BADGE = { text: "Analyse IA", color: COLORS.ai, bg: COLORS.aiBg };
+// Les badges qualifient la NATURE du contenu (analyse rédigée vs données
+// chiffrées sourcées), pas l'outil qui l'a produit. Le moyen de production de
+// l'analyse est documenté à un seul endroit : la section « Sources et
+// méthodologie », en fin de rapport.
+const ANALYSE_BADGE = { text: "Analyse", color: COLORS.ai, bg: COLORS.aiBg };
 const DATA_BADGE = { text: "Données officielles", color: COLORS.data, bg: COLORS.dataBg };
 
 // Libellés lisibles pour les champs "type" libres saisis par l'admin en base
@@ -257,7 +261,7 @@ function drawSubHeading(doc, text) {
 module.exports = {
     COLORS,
     PAGE_MARGIN,
-    AI_BADGE,
+    ANALYSE_BADGE,
     DATA_BADGE,
     formatNumber,
     formatPercent,

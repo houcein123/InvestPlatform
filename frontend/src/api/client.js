@@ -1,14 +1,14 @@
 // ============================================================================
 // Client API — point de passage unique vers le backend.
 // ----------------------------------------------------------------------------
-// Plus aucune URL « http://localhost:3001 » en dur dans les composants : en
-// développement, les chemins relatifs passent par le proxy Vite (voir
-// vite.config.js) ; en production, VITE_API_URL pointe vers le backend déployé.
+// Aucune URL de backend en dur dans les composants : en développement, les
+// chemins relatifs passent par le proxy Vite (voir vite.config.js) ; en
+// production, VITE_API_URL pointe vers le backend déployé.
 // ============================================================================
 
 const BASE_URL = import.meta.env.VITE_API_URL || "";
 
-const TOKEN_KEY = "admin_token";
+const TOKEN_KEY = "investplatform_token";
 
 export const tokenStorage = {
     get: () => localStorage.getItem(TOKEN_KEY),
@@ -28,12 +28,19 @@ export class ApiError extends Error {
     }
 }
 
-async function request(path, { method = "GET", body, auth = false } = {}) {
+async function request(path, { method = "GET", body, auth = true } = {}) {
     const headers = {};
     if (body !== undefined) headers["Content-Type"] = "application/json";
+
+    // Le jeton est joint dès qu'il existe : le backend s'en sert aussi pour
+    // rattacher un achat au compte du client connecté.
+    let jetonEnvoye = false;
     if (auth) {
         const token = tokenStorage.get();
-        if (token) headers.Authorization = `Bearer ${token}`;
+        if (token) {
+            headers.Authorization = `Bearer ${token}`;
+            jetonEnvoye = true;
+        }
     }
 
     let response;
@@ -47,9 +54,10 @@ async function request(path, { method = "GET", body, auth = false } = {}) {
         throw new ApiError("Serveur injoignable. Le backend est-il démarré ?", 0);
     }
 
-    // Une session expirée doit ramener à l'écran de connexion plutôt que
-    // d'afficher une erreur incompréhensible au milieu du tableau de bord.
-    if (response.status === 401 && auth) {
+    // Un 401 ne vaut invalidation du jeton que si ce jeton a effectivement été
+    // présenté. Sans cette condition, un 401 sur un appel anonyme déconnectait
+    // l'utilisateur alors que sa session était parfaitement valide.
+    if (response.status === 401 && jetonEnvoye) {
         tokenStorage.clear();
     }
 
@@ -61,42 +69,45 @@ async function request(path, { method = "GET", body, auth = false } = {}) {
 }
 
 export const api = {
-    // ── Public (CDC §3 et §6) ──
-    catalogue: () => request("/catalogue"),
+    // ── Comptes ──
+    register: (payload) => request("/auth/register", { method: "POST", body: payload, auth: false }),
+    login: (email, mot_de_passe) => request("/auth/login", { method: "POST", body: { email, mot_de_passe }, auth: false }),
+    me: () => request("/auth/me"),
+    updateProfil: (payload) => request("/auth/profil", { method: "PUT", body: payload }),
+    changePassword: (payload) => request("/auth/mot-de-passe", { method: "PUT", body: payload }),
+
+    // ── Catalogue public (CDC §3) ──
+    catalogue: () => request("/catalogue", { auth: false }),
     previewUrl: (sectorId) => `${BASE_URL}/api/catalogue/${sectorId}/preview`,
 
+    // ── Paiement PayPal (CDC §6, étape 2) ──
+    paymentConfig: () => request("/payment/config", { auth: false }),
     createOrder: (sectorId) => request("/payment/create-order", { method: "POST", body: { sectorId } }),
-    capturePayment: (achatId) => request("/payment/capture", { method: "POST", body: { achatId } }),
+    capturePayment: (orderId, achatId) => request("/payment/capture", { method: "POST", body: { orderId, achatId } }),
 
-    generateReport: (sectorId, achatId) =>
-        request("/report/generate", { method: "POST", body: { sectorId, achatId } }),
-    reportStatus: (jobId) => request(`/report/status/${jobId}`),
+    // ── Génération (CDC §6, étape 3) ──
+    generateReport: (sectorId, achatId) => request("/report/generate", { method: "POST", body: { sectorId, achatId } }),
+    reportStatus: (jobId) => request(`/report/status/${jobId}`, { auth: false }),
+    mesRapports: () => request("/report/mes-rapports"),
 
-    // ── Authentification admin ──
-    login: (email, mot_de_passe) => request("/admin/login", { method: "POST", body: { email, mot_de_passe } }),
-    register: (payload) => request("/admin/register", { method: "POST", body: payload }),
-    me: () => request("/admin/me", { auth: true }),
+    // ── Panneau de contrôle (CDC §7) ──
+    adminSecteurs: () => request("/admin/secteurs"),
+    adminSecteur: (id) => request(`/admin/secteurs/${id}`),
+    updateSecteur: (id, payload) => request(`/admin/secteurs/${id}`, { method: "PUT", body: payload }),
 
-    // ── Panneau admin (CDC §7) ──
-    adminSecteurs: () => request("/admin/secteurs", { auth: true }),
-    adminSecteur: (id) => request(`/admin/secteurs/${id}`, { auth: true }),
-    updateSecteur: (id, payload) => request(`/admin/secteurs/${id}`, { method: "PUT", body: payload, auth: true }),
+    chiffresCles: (id) => request(`/admin/secteurs/${id}/chiffres-cles`),
+    saveChiffresCles: (id, payload) => request(`/admin/secteurs/${id}/chiffres-cles`, { method: "PUT", body: payload }),
 
-    chiffresCles: (id) => request(`/admin/secteurs/${id}/chiffres-cles`, { auth: true }),
-    saveChiffresCles: (id, payload) =>
-        request(`/admin/secteurs/${id}/chiffres-cles`, { method: "PUT", body: payload, auth: true }),
+    createZone: (id, payload) => request(`/admin/secteurs/${id}/zones`, { method: "POST", body: payload }),
+    createActeur: (id, payload) => request(`/admin/secteurs/${id}/acteurs`, { method: "POST", body: payload }),
+    createCadre: (id, payload) => request(`/admin/secteurs/${id}/cadre`, { method: "POST", body: payload }),
+    deleteItem: (kind, itemId) => request(`/admin/${kind}/${itemId}`, { method: "DELETE" }),
 
-    zones: (id) => request(`/admin/secteurs/${id}/zones`, { auth: true }),
-    createZone: (id, payload) => request(`/admin/secteurs/${id}/zones`, { method: "POST", body: payload, auth: true }),
+    regenerer: (id) => request(`/admin/secteurs/${id}/regenerer`, { method: "POST" }),
+    recalculerProjections: (id) => request(`/admin/secteurs/${id}/projections`, { method: "POST" }),
 
-    acteurs: (id) => request(`/admin/secteurs/${id}/acteurs`, { auth: true }),
-    createActeur: (id, payload) => request(`/admin/secteurs/${id}/acteurs`, { method: "POST", body: payload, auth: true }),
-
-    cadre: (id) => request(`/admin/secteurs/${id}/cadre`, { auth: true }),
-    createCadre: (id, payload) => request(`/admin/secteurs/${id}/cadre`, { method: "POST", body: payload, auth: true }),
-
-    deleteItem: (kind, itemId) => request(`/admin/${kind}/${itemId}`, { method: "DELETE", auth: true }),
-
-    regenerer: (id) => request(`/admin/secteurs/${id}/regenerer`, { method: "POST", auth: true }),
-    stats: () => request("/admin/stats", { auth: true }),
+    stats: () => request("/admin/stats"),
+    systeme: () => request("/admin/systeme"),
+    comptes: () => request("/admin/comptes"),
+    setRole: (id, role) => request(`/admin/comptes/${id}/role`, { method: "PUT", body: { role } }),
 };

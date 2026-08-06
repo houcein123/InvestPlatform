@@ -23,14 +23,30 @@ const KPI_LABELS = {
 /** Nombre maximal de séries transmises au modèle (contrôle la taille du prompt). */
 const MAX_SERIES = 12;
 
+const ANNEES_PROJETEES = [2025, 2026, 2027, 2028];
+
 function formatSeries(row) {
-    const points = YEARS
+    const observes = YEARS
         .map((y) => [y, row[`valeur_${y}`]])
         .filter(([, v]) => v !== null && v !== undefined)
         .map(([y, v]) => `${y}: ${v}`);
-    if (points.length === 0) return null;
+    if (observes.length === 0) return null;
+
     const unite = row.unite ? ` (${row.unite})` : "";
-    return `- ${row.indicateur}${unite} → ${points.join(", ")}`;
+    let ligne = `- ${row.indicateur}${unite} → observé ${observes.join(", ")}`;
+
+    // Les estimations sont transmises au modèle en étant explicitement
+    // étiquetées : la section « Perspectives » doit s'appuyer dessus sans
+    // jamais les présenter comme des chiffres officiels.
+    const projetes = ANNEES_PROJETEES
+        .map((y) => [y, row[`projection_${y}`]])
+        .filter(([, v]) => v !== null && v !== undefined)
+        .map(([y, v]) => `${y}: ${v}`);
+    if (projetes.length > 0) {
+        ligne += ` | ESTIMÉ ${projetes.join(", ")}`;
+    }
+
+    return ligne;
 }
 
 /**

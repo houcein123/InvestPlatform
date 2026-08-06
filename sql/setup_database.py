@@ -235,13 +235,23 @@ def get_secteur_id(cur, slug):
     return row[0] if row else None
 
 
-def importer_csv(conn):
-    """Parcourt data/<dossier>/*.csv et alimente donnees_statistiques."""
+def importer_csv(conn, remplacer=False):
+    """
+    Parcourt data/<dossier>/*.csv et alimente donnees_statistiques.
+
+    `remplacer=True` vide d'abord la table : indispensable après un changement
+    de règle de nommage des indicateurs, sinon les anciennes lignes survivent
+    à côté des nouvelles sous un autre nom. Les données sont intégralement
+    reconstructibles depuis data/, l'opération est donc sans perte.
+    """
     if not DATA_DIR.is_dir():
         sys.exit(f"❌ Dossier de données introuvable : {DATA_DIR}")
 
     total = 0
     with conn.cursor() as cur:
+        if remplacer:
+            cur.execute("DELETE FROM donnees_statistiques")
+            print(f"   🗑️  {cur.rowcount} anciennes séries supprimées")
         for dossier, slug in SECTEURS_MAP.items():
             chemin = DATA_DIR / dossier
             if not chemin.is_dir():
@@ -447,11 +457,16 @@ def main():
                         help="exécute sql/schema.sql (SUPPRIME toutes les tables)")
     parser.add_argument("--import-csv", action="store_true",
                         help="importe les CSV du dossier data/")
+    parser.add_argument("--reimport", action="store_true",
+                        help="vide donnees_statistiques puis réimporte les CSV")
     parser.add_argument("--seed", action="store_true",
                         help="insère les données de référence")
     parser.add_argument("--all", action="store_true",
                         help="équivaut à --reset --import-csv --seed")
     args = parser.parse_args()
+
+    if args.reimport:
+        args.import_csv = True
 
     if args.all:
         args.reset = args.import_csv = args.seed = True
@@ -476,7 +491,7 @@ def main():
 
         if args.import_csv:
             print("\n📊 Import des CSV locaux…")
-            importer_csv(conn)
+            importer_csv(conn, remplacer=args.reimport)
 
         if args.seed:
             print("\n🏗️  Données de référence…")

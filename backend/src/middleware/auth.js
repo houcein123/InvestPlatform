@@ -1,40 +1,73 @@
 // ============================================================================
-// Authentification admin — vérification du JWT puis rechargement de l'admin
-// en base (un compte désactivé après émission du token est ainsi rejeté).
+// Authentification — vérification du JWT puis rechargement du compte en base.
+// ----------------------------------------------------------------------------
+// Le rôle n'est jamais lu depuis le jeton : il est relu en base à chaque
+// requête. Un compte rétrogradé ou désactivé perd donc ses droits
+// immédiatement, sans attendre l'expiration du jeton.
 // ============================================================================
 
 const jwt = require("jsonwebtoken");
-const { pool } = require("../config/db");
 const { config } = require("../config/env");
+const accountRepository = require("../services/accountRepository");
 
-async function verifyAdmin(req, res, next) {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        return res.status(401).json({ error: "Token manquant" });
-    }
-
-    let decoded;
+/** Extrait et vérifie le jeton ; renvoie null si absent ou invalide. */
+function lireJeton(req) {
+    const entete = req.headers.authorization;
+    if (!entete || !entete.startsWith("Bearer ")) return null;
     try {
-        decoded = jwt.verify(authHeader.split(" ")[1], config.jwtSecret);
-    } catch (err) {
-        return res.status(401).json({ error: "Token invalide" });
+        return jwt.verify(entete.split(" ")[1], config.jwtSecret);
+    } catch {
+        return null;
     }
+}
 
+async function chargerCompte(req) {
+    const charge = lireJeton(req);
+    if (!charge) return null;
+    const compte = await accountRepository.findById(charge.id);
+    if (!compte || !compte.est_actif) return null;
+    return compte;
+}
+
+/** Exige un compte connecté (client ou administrateur). */
+async function requireAuth(req, res, next) {
     try {
-        const result = await pool.query(
-            "SELECT id, email, nom, prenom, role, est_actif FROM admins WHERE id = $1",
-            [decoded.id]
-        );
-        if (result.rows.length === 0) return res.status(401).json({ error: "Admin non trouvé" });
-
-        const admin = result.rows[0];
-        if (!admin.est_actif) return res.status(403).json({ error: "Compte désactivé" });
-
-        req.admin = admin;
+        const compte = await chargerCompte(req);
+        if (!compte) return res.status(401).json({ error: "Connexion requise" });
+        req.compte = compte;
         next();
     } catch (err) {
         next(err);
     }
 }
 
-module.exports = { verifyAdmin };
+/** Exige un compte administrateur. */
+async function requireAdmin(req, res, next) {
+    try {
+        const compte = await chargerCompte(req);
+        if (!compte) return res.status(401).json({ error: "Connexion requise" });
+        if (compte.role !== accountRepository.ROLE_ADMIN) {
+            return res.status(403).json({ error: "Accès réservé aux administrateurs" });
+        }
+        req.compte = compte;
+        next();
+    } catch (err) {
+        next(err);
+    }
+}
+
+/**
+ * Renseigne req.compte s'il y a un jeton valide, sans jamais bloquer.
+ * Utilisé sur le parcours d'achat : un visiteur non connecté peut commander,
+ * et un client connecté voit son achat rattaché à son espace.
+ */
+async function optionalAuth(req, res, next) {
+    try {
+        req.compte = await chargerCompte(req);
+        next();
+    } catch (err) {
+        next(err);
+    }
+}
+
+module.exports = { requireAuth, requireAdmin, optionalAuth };

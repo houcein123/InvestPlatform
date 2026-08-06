@@ -6,8 +6,8 @@
 
 Service de génération de rapports sectoriels PDF pour les investisseurs
 étrangers intéressés par la Tunisie. Chaque rapport combine des **données
-chiffrées officielles** stockées en base et une **analyse narrative rédigée par
-IA** (Groq) à partir de ces mêmes chiffres.
+chiffrées officielles** stockées en base et des **sections rédigées** produites
+à partir de ces mêmes chiffres.
 
 ---
 
@@ -32,14 +32,37 @@ Copier `backend/.env.example` vers `backend/.env` et renseigner :
 | Variable | Rôle |
 |----------|------|
 | `DATABASE_URL` | Chaîne de connexion Neon (obligatoire) |
-| `JWT_SECRET` | Signature des jetons admin (obligatoire) |
-| `GROQ_API_KEY` | Clé Groq — sans elle, les sections IA restent vides |
-| `GROQ_MODEL` | Modèle utilisé (défaut `llama-3.3-70b-versatile`) |
-| `PORT`, `CORS_ORIGIN` | Réseau |
+| `JWT_SECRET` | Signature des jetons de session (obligatoire) |
+| `GROQ_API_KEY` | Clé Groq — sans elle, les sections rédigées restent vides |
+| `PAYPAL_ENV` | `sandbox` (aucun argent réel) ou `live` (paiements réels) |
+| `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET` | Identifiants developer.paypal.com |
+| `PAYPAL_CURRENCY` / `PAYPAL_TAUX_TND` | Devise d'encaissement et taux depuis le TND |
+| `PORT`, `CORS_ORIGIN`, `DEVISE` | Réseau et affichage |
 
 Le serveur refuse de démarrer si une variable obligatoire manque ou si la base
-est injoignable — un échec explicite au lancement vaut mieux qu'une API qui
-répond 500 à chaque requête.
+est injoignable, et avertit au lancement si PayPal est en mode `live`.
+
+---
+
+## 👤 Comptes et rôles
+
+**Un seul écran de connexion pour tout le monde.** L'inscription publique crée
+uniquement des comptes **client** ; le champ `role` est ignoré s'il est envoyé
+dans la requête, ce qui rend l'élévation de privilèges impossible depuis le
+site. Un administrateur existe déjà en base et se connecte par le même
+formulaire — c'est son rôle enregistré qui décide de la suite :
+
+| Rôle | Après connexion | Navigation |
+|------|-----------------|------------|
+| `client` | Catalogue | Catalogue · Mes rapports · Profil · Paramètres |
+| `admin` | Tableau de bord | Pilotage (tableau de bord, secteurs, comptes) · Profil · Paramètres · Catalogue |
+
+Le rôle est **relu en base à chaque requête**, jamais fait confiance au jeton :
+un compte rétrogradé ou désactivé perd ses droits immédiatement.
+
+La promotion d'un compte se fait depuis **Comptes** dans le panneau de contrôle.
+Le dernier administrateur actif ne peut pas être rétrogradé, et personne ne peut
+retirer son propre rôle : la plateforme ne peut pas se retrouver sans admin.
 
 ---
 
@@ -51,19 +74,22 @@ InvestPlatform/
 │   └── src/
 │       ├── server.js              ← point d'entrée
 │       ├── config/                env.js (config centralisée), db.js (pool pg)
-│       ├── middleware/            auth.js (verifyAdmin), errorHandler.js
+│       ├── middleware/            auth.js (requireAuth / requireAdmin), errorHandler.js
 │       ├── routes/                index.js = table de routage complète
-│       │   ├── auth.routes.js         /api/admin/register|login|me
-│       │   ├── catalogue.routes.js    /api/catalogue (public + aperçu)
-│       │   ├── payment.routes.js      /api/payment  (PayPal simulé)
-│       │   ├── report.routes.js       /api/report   (génération + progression)
-│       │   └── admin.routes.js        /api/admin/*  (protégé)
+│       │   ├── auth.routes.js         /api/auth      inscription, connexion, profil
+│       │   ├── catalogue.routes.js    /api/catalogue  public + aperçu gratuit
+│       │   ├── payment.routes.js      /api/payment    PayPal Orders v2
+│       │   ├── report.routes.js       /api/report     génération + progression
+│       │   └── admin.routes.js        /api/admin      réservé au rôle admin
 │       ├── services/
+│       │   ├── accountRepository.js   comptes et rôles
 │       │   ├── sectorRepository.js    seul accès SQL aux tables métier
 │       │   ├── promptService.js       les 7 prompts + contexte chiffré
-│       │   ├── groqService.js         client Groq
-│       │   ├── reportService.js       orchestration données → IA → PDF → base
-│       │   ├── salesService.js        achats et statistiques de vente
+│       │   ├── groqService.js         client de rédaction
+│       │   ├── projectionService.js   estimations 2024-2028
+│       │   ├── paypalService.js       jeton OAuth, création et capture
+│       │   ├── reportService.js       orchestration données → texte → PDF → base
+│       │   ├── salesService.js        achats, paiements, statistiques
 │       │   └── jobStore.js            suivi de progression des générations
 │       └── pdf/
 │           ├── sections.js            SOURCE UNIQUE des 12 sections
@@ -73,13 +99,19 @@ InvestPlatform/
 │   └── src/
 │       ├── api/client.js          seul point d'appel au backend
 │       ├── auth/AuthContext.jsx
-│       ├── components/            NavBar, SectorCard, ProgressBar
+│       ├── preferences.js         réglages locaux à l'appareil
+│       ├── components/
+│       │   ├── layout/            AppShell, Sidebar
+│       │   ├── SectorCard.jsx     carte catalogue + parcours d'achat
+│       │   ├── PayPalButton.jsx   SDK PayPal
+│       │   └── ProgressBar.jsx
 │       ├── pages/
 │       │   ├── Catalogue.jsx          page d'accueil publique
-│       │   ├── LoginPage.jsx
-│       │   └── admin/
-│       │       ├── Dashboard.jsx      ventes, revenu, secteurs
-│       │       └── SecteurDonnees.jsx édition des données + régénération
+│       │   ├── LoginPage.jsx          connexion + inscription client
+│       │   ├── Profil.jsx             informations et mot de passe
+│       │   ├── Parametres.jsx         préférences + état des services
+│       │   ├── MesRapports.jsx        espace client
+│       │   └── admin/                 Dashboard, Secteurs, SecteurDonnees, Comptes
 │       └── styles/global.css      charte unique (aucun style inline)
 ├── data/                          CSV de l'INS, un dossier par secteur
 ├── sql/
@@ -92,12 +124,12 @@ InvestPlatform/
 **Deux principes structurants :**
 
 1. **Une source de vérité par sujet.** Les sections du rapport sont décrites une
-   seule fois (`pdf/sections.js`) et alimentent à la fois la couverture, le
-   sommaire, l'aperçu gratuit et le corps du document : le sommaire ne peut plus
-   annoncer une section qui n'est pas produite. De même, le schéma SQL n'existe
-   qu'à un endroit (`sql/schema.sql`), lu par le script Python.
-2. **Une porte d'entrée par couche.** Le SQL métier vit dans
-   `sectorRepository.js`, les appels HTTP du frontend dans `api/client.js`.
+   seule fois (`pdf/sections.js`) et alimentent couverture, sommaire, aperçu et
+   corps du document : le sommaire ne peut plus annoncer une section absente.
+   Le schéma SQL n'existe qu'à un endroit (`sql/schema.sql`), lu par le script
+   Python.
+2. **Une porte d'entrée par couche.** Le SQL métier vit dans les *repositories*,
+   les appels HTTP du frontend dans `api/client.js`.
 
 ---
 
@@ -106,99 +138,157 @@ InvestPlatform/
 | Étape | Route | Détail |
 |-------|-------|--------|
 | 1. Catalogue | `GET /api/catalogue` | 6 secteurs, prix, pages, date de mise à jour |
-| 1bis. Aperçu | `GET /api/catalogue/:id/preview` | 2 pages — couverture + sommaire, sans appel IA |
-| 2. Commande | `POST /api/payment/create-order` | crée un achat `en_attente` |
-| 2bis. Paiement | `POST /api/payment/capture` | passe l'achat à `paye` |
+| 1bis. Aperçu | `GET /api/catalogue/:id/preview` | 2 pages — couverture + sommaire, sans rédaction |
+| 2. Commande | `POST /api/payment/create-order` | crée l'achat puis la commande PayPal |
+| 2bis. Paiement | `POST /api/payment/capture` | encaisse, vérifie le montant, marque l'achat payé |
 | 3. Génération | `POST /api/report/generate` | renvoie un `jobId` (202) |
 | 3bis. Progression | `GET /api/report/status/:jobId` | alimente la barre de progression |
-| 4. Téléchargement | `GET /reports/<fichier>.pdf` | PDF servi en statique |
+| 4. Téléchargement | `GET /reports/<fichier>.pdf` | PDF servi en statique, retrouvable dans **Mes rapports** |
 
-La génération n'est possible qu'avec un achat **payé** portant sur le **même
-secteur** : la route refuse sinon (`402`).
+Contrôles appliqués côté serveur, jamais délégués au navigateur :
+
+- la génération exige un achat **payé** portant sur le **même secteur** (`402` sinon) ;
+- le montant réellement encaissé est comparé au tarif du catalogue converti ;
+- la commande PayPal doit correspondre à l'achat présenté (`custom_id`) ;
+- une capture rejouée ne crée pas de second encaissement.
 
 L'aperçu gratuit est produit par les mêmes fonctions que le rapport payant :
 l'acheteur voit exactement les deux premières pages de ce qu'il achètera, et
-l'aperçu reste instantané même si le quota Groq est épuisé.
+l'aperçu reste instantané même si le quota de rédaction est épuisé.
+
+---
+
+## 💳 PayPal
+
+L'intégration utilise l'API **Orders v2**. En `sandbox`, le parcours est
+identique à la production mais se déroule sur des comptes de test : **aucun
+argent réel ne circule**. Un bandeau le rappelle sur le catalogue.
+
+> **Le dinar tunisien n'est pas une devise acceptée par PayPal.** Les tarifs
+> restent affichés et comptabilisés en TND ; la transaction est présentée à
+> PayPal en `PAYPAL_CURRENCY` (EUR par défaut), convertie au taux
+> `PAYPAL_TAUX_TND`. La carte du catalogue affiche les deux montants.
+> Ce taux est une constante de configuration, à réviser périodiquement.
+
+Pour passer en production : créer des identifiants **Live** sur
+developer.paypal.com, les placer dans `backend/.env` et basculer
+`PAYPAL_ENV=live`. Le serveur affiche alors un avertissement au démarrage.
 
 ---
 
 ## 📄 Structure du rapport (CDC §5)
 
-Couverture + sommaire, puis 12 sections — 14 pages minimum (15 en pratique) :
+Couverture + sommaire, puis 12 sections — 14 pages minimum (15 à 18 en pratique) :
 
-| # | Section | Source |
+| # | Section | Nature |
 |---|---------|--------|
-| 1 | Présentation générale du secteur | IA |
-| 2 | Chiffres clés et graphiques | Base |
-| 3 | Analyse des tendances | IA |
-| 4 | Acteurs principaux | Base |
-| 5 | Cadre réglementaire et fiscal | Base |
-| 6 | Zones géographiques et zones franches | Base |
-| 7 | Opportunités identifiées | IA |
-| 8 | Analyse des risques | IA |
-| 9 | Benchmarking régional (Maroc, Égypte) | IA |
-| 10 | Recommandations investisseur | IA |
-| 11 | Perspectives 2025-2028 | IA |
-| 12 | Sources et méthodologie | Base |
+| 1 | Présentation générale du secteur | Analyse |
+| 2 | Chiffres clés et graphiques | Données |
+| 3 | Analyse des tendances | Analyse |
+| 4 | Acteurs principaux | Données |
+| 5 | Cadre réglementaire et fiscal | Données |
+| 6 | Zones géographiques et zones franches | Données |
+| 7 | Opportunités identifiées | Analyse |
+| 8 | Analyse des risques | Analyse |
+| 9 | Benchmarking régional (Maroc, Égypte) | Analyse |
+| 10 | Recommandations investisseur | Analyse |
+| 11 | Perspectives 2025-2028 | Analyse |
+| 12 | Sources et méthodologie | Données |
 
-Les graphiques sont dessinés directement avec les primitives vectorielles de
-PDFKit : aucune librairie de charts n'est nécessaire.
+Les graphiques sont dessinés avec les primitives vectorielles de PDFKit :
+aucune librairie de charts n'est nécessaire.
+
+Le document ne signale nulle part que les sections rédigées sont produites par
+un modèle de langage, **sauf dans « Sources et méthodologie »**, où le procédé
+et le modèle employé sont décrits explicitement. C'est le seul endroit prévu
+pour cette mention.
 
 ### Approche hybride
 
 `promptService.buildDataContext()` sérialise les données chiffrées du secteur
-(chiffres clés, séries statistiques, zones, acteurs, cadre réglementaire) et
-**injecte ce bloc dans chacun des 7 prompts**, avec la consigne de ne pas
-inventer de chiffre absent. L'analyse narrative commente donc les mêmes données
-que celles imprimées dans les sections « données » du rapport.
+et **injecte ce bloc dans chacun des 7 prompts**, avec la consigne de ne pas
+inventer de chiffre absent. Les estimations y sont transmises étiquetées
+`ESTIMÉ`, pour que la section « Perspectives » s'appuie dessus sans les
+présenter comme des données publiées.
 
 Chaque appel est tracé dans `logs_generation` (prompt, réponse, durée, statut).
-Une section IA en échec n'interrompt pas la génération : le PDF affiche un
-encart explicite et le rapport reste livrable.
+Une section en échec n'interrompt pas la génération : le PDF affiche un encart
+explicite et le rapport reste livrable.
+
+---
+
+## 📈 Données observées et estimations
+
+Distinction respectée de la base jusqu'au PDF :
+
+| | Signification | Rendu |
+|---|---|---|
+| `valeur_YYYY` | Donnée **observée**, publiée par la source officielle | Barre pleine, couleur primaire |
+| `projection_YYYY` | **Estimation** calculée | Barre claire, mention « estimation », légende dédiée |
+
+`projectionService` met deux modèles en concurrence pour chaque série et retient
+celui qui s'ajuste le mieux à l'historique :
+
+- **régression linéaire** par moindres carrés (≥ 4 points), avec R² ;
+- **taux de croissance annuel moyen** (≥ 3 points), pour les séries à profil
+  exponentiel ;
+- **prolongement de tendance** quand seuls 2 points existent.
+
+Une série dont aucun modèle n'atteint un R² de 0,30 ne reçoit **aucune
+estimation** — une case vide vaut mieux qu'un chiffre inventé. Les extrapolations
+sont bornées (pas de valeur négative sur une série positive, pas de dérive
+au-delà du triple du maximum observé).
+
+État actuel : **251 séries projetées sur 345**, R² moyen 0,80 pour la régression
+et 0,94 pour le TCAM. Les 94 séries restantes n'ont pas assez d'historique.
+
+Recalcul depuis le panneau de contrôle (**Secteurs → Données → Recalculer les
+projections**) ou par l'API `POST /api/admin/projections`. À relancer après
+chaque mise à jour des séries.
 
 ---
 
 ## 🛠️ Base de données
 
-13 tables sur PostgreSQL (Neon). Le script de setup couvre trois opérations
+13 tables sur PostgreSQL (Neon). Le script de setup couvre quatre opérations
 indépendantes :
 
 ```bash
 pip install -r requirements.txt
 python sql/setup_database.py --import-csv   # importe data/*.csv
+python sql/setup_database.py --reimport     # vide puis réimporte (après changement de nommage)
 python sql/setup_database.py --seed         # zones, acteurs, cadre, chiffres clés
 python sql/setup_database.py --all          # --reset + --import-csv + --seed
 ```
 
 `--reset` exécute `sql/schema.sql`, qui **supprime toutes les tables** ; le
-script demande confirmation. Les CSV sont lus dans le dossier local `data/`
-(l'ancienne version les téléchargeait depuis GitHub).
+script demande confirmation. Les CSV sont lus dans le dossier local `data/`.
 
-Pour faire évoluer une base existante sans la vider, utiliser
-`sql/migrations/`.
+Pour faire évoluer une base existante sans la vider, utiliser `sql/migrations/`
+dans l'ordre numérique.
 
 ### Limites connues des données
 
-- Les CSV de l'INS couvrent **2015-2023**, alors que le schéma stocke
-  2020-2024 : `valeur_2024` reste donc vide pour la plupart des indicateurs,
-  et les années 2015-2019 ne sont pas importées.
+- Les CSV de l'INS couvrent **2015-2023**, parfois 2024 : les années
+  antérieures à 2020 ne sont pas importées (le schéma commence en 2020) et
+  35 séries seulement disposent d'une valeur 2024 publiée.
 - Certains tableaux de l'INS sont **trimestriels** ; l'import retient la
   dernière valeur connue de chaque année.
-- Les colonnes `projection_2025..2028` ne sont pas encore alimentées : les
-  graphiques n'affichent donc que l'historique.
+- Les libellés de ligne ambigus (« Algérie », « Masculin ») sont préfixés par
+  le titre du tableau source pour rester lisibles hors contexte.
 
 ---
 
-## 🔐 Panneau admin (CDC §7)
+## 🔐 Panneau de contrôle (CDC §7)
 
-Accessible sur `/admin` après connexion (`/login`).
-
-- **Tableau de bord** — rapports vendus, revenu total et par secteur, derniers
-  rapports générés, édition rapide des secteurs (nom, description, prix, statut).
-- **Données d'un secteur** (`/admin/secteurs/:id`) — formulaire des chiffres
-  clés, ajout/suppression des zones, acteurs et textes réglementaires, liste des
-  séries statistiques importées, et bouton **Régénérer le rapport** avec suivi de
-  progression.
+- **Tableau de bord** — rapports vendus, revenu total, répartition par secteur,
+  derniers rapports générés.
+- **Secteurs** — tarif, description, mise en ligne.
+- **Données d'un secteur** — formulaire des chiffres clés, ajout/suppression des
+  zones, acteurs et textes réglementaires, séries statistiques avec leurs
+  estimations, **Recalculer les projections** et **Régénérer le rapport** (avec
+  suivi de progression).
+- **Comptes** — liste des comptes et gestion des rôles.
 
 Enregistrer des chiffres clés rafraîchit automatiquement la date de mise à jour
 affichée au catalogue.
@@ -209,10 +299,10 @@ affichée au catalogue.
 
 | Sujet | État |
 |-------|------|
-| **PayPal** | Simulé. `payment.routes.js` trace un vrai achat en base mais valide le paiement sans appel externe ; l'intégration se limitera à remplacer le corps des deux routes. |
-| **Comptes clients** | La table `utilisateurs` existe, mais seule l'authentification **admin** est implémentée. Les achats sont donc enregistrés sans client rattaché (`id_utilisateur` NULL) et il n'y a pas encore d'« espace utilisateur » où retrouver ses rapports. |
-| **Projections 2025-2028** | Colonnes prévues au schéma, pas encore alimentées. |
+| **PayPal en production** | L'intégration est complète et fonctionnelle ; seul le passage `PAYPAL_ENV=live` avec des identifiants Live reste à faire. Le taux TND → EUR est figé en configuration. |
+| **Vérification d'email** | La colonne `est_verifie` existe mais aucun email de confirmation n'est envoyé à l'inscription. |
 | **Suivi des générations** | En mémoire (`jobStore`) : un job ne survit pas à un redémarrage du serveur. Le PDF produit, lui, est bien persisté. |
+| **Achat sans compte** | Techniquement possible (`id_utilisateur` NULL) mais l'interface impose la connexion, afin que le rapport soit retrouvable dans « Mes rapports ». |
 
 ---
 
@@ -235,7 +325,9 @@ affichée au catalogue.
 |--------|-------|----------|
 | `Variables d'environnement manquantes` | `.env` absent ou incomplet | Copier `backend/.env.example` |
 | `Connexion PostgreSQL impossible` | URL Neon invalide | Vérifier `DATABASE_URL` |
-| `GROQ_API_KEY absente` (avertissement) | Clé non configurée | Les sections IA restent vides ; le reste fonctionne |
+| `GROQ_API_KEY absente` (avertissement) | Clé non configurée | Les sections rédigées restent vides ; le reste fonctionne |
+| `Paiement indisponible` | Identifiants PayPal absents | Renseigner `PAYPAL_CLIENT_ID` et `PAYPAL_CLIENT_SECRET` |
+| `Payer has not yet approved the Order` | Capture appelée avant approbation | Passer par le bouton PayPal, qui enchaîne les deux étapes |
+| `Accès réservé aux administrateurs` | Compte client sur une route admin | Faire promouvoir le compte depuis **Comptes** |
 | `Serveur injoignable` côté React | Backend arrêté | `cd backend && npm run dev` |
-| `Aucun paiement confirmé` | Génération appelée sans achat payé | Passer par `create-order` puis `capture` |
 | `Port 3001 already in use` | Instance déjà lancée | Fermer l'autre processus ou changer `PORT` |
