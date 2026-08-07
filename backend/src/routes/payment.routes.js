@@ -33,6 +33,7 @@ router.get("/config", (req, res) => {
         devisePaiement: statut.devise,
         deviseAffichage: config.devise,
         tauxConversion: statut.tauxTND,
+        locale: statut.locale,
         argentReel: statut.argentReel,
     });
 });

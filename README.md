@@ -164,6 +164,58 @@ L'intégration utilise l'API **Orders v2**. En `sandbox`, le parcours est
 identique à la production mais se déroule sur des comptes de test : **aucun
 argent réel ne circule**. Un bandeau le rappelle sur le catalogue.
 
+### Page d'arrivée et langue
+
+Deux réglages de `application_context` évitent des pièges classiques :
+
+| Réglage | Effet |
+|---------|-------|
+| `landing_page: "LOGIN"` | Force la page **de connexion au compte PayPal**. Avec la valeur par défaut (`NO_PREFERENCE`), PayPal choisit lui-même et ouvre souvent le formulaire de **carte bancaire**. Réglé dans `payment_source.paypal.experience_context` (API actuelle ; `application_context` est déprécié). |
+| `locale` (+ `locale` du SDK) | Fixe la langue. Sans lui, PayPal la déduit de l'adresse IP et sert la page en arabe ou en anglais. Réglable par `PAYPAL_LOCALE`. |
+
+### ⚠️ Tester un paiement en sandbox
+
+C'est le point qui bloque le plus souvent. **Votre compte PayPal réel ne
+fonctionne pas dans la fenêtre de paiement en mode sandbox** : il faut un
+compte acheteur de test.
+
+1. Ouvrir https://developer.paypal.com → **Testing Tools → Sandbox accounts**.
+2. Repérer le compte de type **Personal** (l'acheteur). PayPal en crée un par
+   défaut, du genre `sb-xxxxx@personal.example.com`.
+3. Cliquer sur **⋮ → View/Edit account** pour lire ou changer son mot de passe.
+4. Sur le catalogue, cliquer sur le bouton PayPal, puis se connecter dans la
+   fenêtre avec **ces identifiants de test**.
+
+Le paiement aboutit alors, l'achat passe à `paye` et la génération démarre.
+
+> **Symptôme caractéristique d'un email non reconnu :** vous saisissez votre
+> adresse, vous cliquez sur « Suivant », et au lieu de l'écran mot de passe
+> PayPal affiche « Payer par carte bancaire » avec adresse de facturation et
+> date de naissance. Le sandbox ne dit jamais « compte inconnu » — il bascule
+> silencieusement sur l'inscription invité. Vérifié en reproduisant le cas
+> avec une adresse volontairement inexistante : comportement identique.
+> Aucun réglage côté serveur ne change cela, seul l'email compte.
+
+### Un seul moyen de paiement
+
+Le composant fixe `fundingSource: FUNDING.PAYPAL` : **un seul bouton**, le
+paiement par compte PayPal.
+
+Par défaut, le SDK ajoute aussi un bouton « Carte bancaire » qui ouvre le
+paiement **invité** — un parcours distinct, sur lequel `landing_page: LOGIN`
+n'a aucun effet, et qui conduit directement au formulaire de carte. Pour le
+réactiver un jour, retirer la ligne `fundingSource` dans
+`frontend/src/components/PayPalButton.jsx`.
+
+Le composant détruit son instance PayPal au démontage (`close()` puis vidage du
+conteneur). Sans cela, un simple rejeu de l'effet — identité de `config`
+modifiée, double montage de React en développement — empilait un **second jeu
+de boutons** dans le même conteneur.
+
+Si un clic ne produit rien, la cause est presque toujours une **fenêtre
+surgissante bloquée** : autorisez les pop-ups pour `localhost:5173`. Un message
+explicite s'affiche désormais dans la carte du secteur à la place du silence.
+
 > **Le dinar tunisien n'est pas une devise acceptée par PayPal.** Les tarifs
 > restent affichés et comptabilisés en TND ; la transaction est présentée à
 > PayPal en `PAYPAL_CURRENCY` (EUR par défaut), convertie au taux

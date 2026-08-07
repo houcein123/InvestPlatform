@@ -402,6 +402,16 @@ a:hover { text-decoration: underline; }
 
 .paypal__zone { min-height: 42px; }
 .paypal__zone--inactive { opacity: .5; pointer-events: none; }
+.paypal__aide {
+    margin-top: 9px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--gold);
+    background: var(--gold-bg);
+    border: 1px solid #fcd34d;
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+}
 
 /* ══════════════════════════════════════════════════════════════════════════
    BOUTONS ET FORMULAIRES

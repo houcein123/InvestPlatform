@@ -32,6 +32,9 @@ const config = {
     // TND et la transaction est présentée dans cette devise, à ce taux.
     paypalCurrency: process.env.PAYPAL_CURRENCY || "EUR",
     paypalTauxTND: Number(process.env.PAYPAL_TAUX_TND) || 0.29,
+    // Sans cette valeur, PayPal déduit la langue de l'adresse IP et sert
+    // parfois la page de paiement en arabe ou en anglais.
+    paypalLocale: process.env.PAYPAL_LOCALE || "fr_FR",
 
     // Devise d'affichage et de comptabilité du catalogue
     devise: process.env.DEVISE || "TND",

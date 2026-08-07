@@ -105,10 +105,26 @@ async function createOrder({ achatId, montantTND, secteur }) {
                     },
                 },
             ],
-            application_context: {
-                brand_name: "InvestPlatform",
-                user_action: "PAY_NOW",
-                shipping_preference: "NO_SHIPPING",
+            // `payment_source.paypal` déclare que la commande se règle avec un
+            // COMPTE PayPal. C'est ce qui supprime le repli « paiement invité
+            // par carte » : avec l'ancien `application_context`, PayPal restait
+            // libre de renvoyer l'acheteur vers le formulaire de carte dès que
+            // l'email saisi ne correspondait à aucun compte connu.
+            payment_source: {
+                paypal: {
+                    experience_context: {
+                        brand_name: "InvestPlatform",
+                        // PAY_NOW : le bouton final affiche « Payer maintenant »
+                        // plutôt que « Continuer ».
+                        user_action: "PAY_NOW",
+                        // Rapport téléchargeable : aucune adresse de livraison.
+                        shipping_preference: "NO_SHIPPING",
+                        // Page de connexion au compte, et non page d'inscription.
+                        landing_page: "LOGIN",
+                        // Sinon PayPal déduit la langue de l'adresse IP.
+                        locale: config.paypalLocale.replace("_", "-"),
+                    },
+                },
             },
         },
     });
@@ -146,6 +162,7 @@ function statut() {
         environnement: config.paypalEnv,
         devise: config.paypalCurrency,
         tauxTND: config.paypalTauxTND,
+        locale: config.paypalLocale,
         clientId: config.paypalClientId || null,
         argentReel: config.paypalEnv === "live",
     };
