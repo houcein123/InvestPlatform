@@ -112,6 +112,45 @@ function contentWidth(doc) {
 }
 
 /**
+ * Raccourcit un texte pour qu'il tienne sur UNE ligne de `largeurMax` points.
+ *
+ * Indispensable pour toute cellule de tableau : contrairement à ce que sa
+ * documentation laisse entendre, l'option `lineBreak: false` de PDFKit
+ * n'empêche pas le retour à la ligne (mesuré : un libellé de 172 pt placé dans
+ * une colonne de 76 pt occupe 28,8 pt de hauteur, soit trois lignes, avec ou
+ * sans l'option). Des lignes de tableau à hauteur fixe se chevauchaient donc,
+ * et un libellé long poussait le reste de la ligne sur la page suivante.
+ *
+ * On mesure et on coupe nous-mêmes : la hauteur d'une cellule devient
+ * prévisible, et la pagination reste maîtrisée.
+ */
+function tronquer(doc, texte, largeurMax) {
+    const chaine = String(texte ?? "");
+    if (largeurMax <= 0) return "";
+    if (doc.widthOfString(chaine) <= largeurMax) return chaine;
+
+    const suffixe = "…";
+    const largeurSuffixe = doc.widthOfString(suffixe);
+    let coupe = chaine.length;
+
+    // Recherche dichotomique : bien plus rapide qu'un retrait caractère par
+    // caractère sur les libellés longs, nombreux dans les tableaux INS.
+    let bas = 0;
+    let haut = chaine.length;
+    while (bas < haut) {
+        const milieu = Math.ceil((bas + haut) / 2);
+        if (doc.widthOfString(chaine.slice(0, milieu)) + largeurSuffixe <= largeurMax) {
+            bas = milieu;
+        } else {
+            haut = milieu - 1;
+        }
+    }
+    coupe = bas;
+
+    return coupe <= 0 ? suffixe : chaine.slice(0, coupe).trimEnd() + suffixe;
+}
+
+/**
  * S'assure qu'il reste au moins `needed` points avant le bas de la zone de
  * contenu ; sinon crée une nouvelle page. Nécessaire pour tout élément
  * dessiné "à la main" (rectangles, graphiques) qui n'est pas soumis à la
@@ -271,6 +310,7 @@ module.exports = {
     stripInlineMarkdown,
     humanizeType,
     contentWidth,
+    tronquer,
     ensureSpace,
     withoutBottomMargin,
     drawHeaderFooter,

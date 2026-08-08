@@ -34,13 +34,12 @@ Copier `backend/.env.example` vers `backend/.env` et renseigner :
 | `DATABASE_URL` | Chaîne de connexion Neon (obligatoire) |
 | `JWT_SECRET` | Signature des jetons de session (obligatoire) |
 | `GROQ_API_KEY` | Clé Groq — sans elle, les sections rédigées restent vides |
-| `PAYPAL_ENV` | `sandbox` (aucun argent réel) ou `live` (paiements réels) |
-| `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET` | Identifiants developer.paypal.com |
-| `PAYPAL_CURRENCY` / `PAYPAL_TAUX_TND` | Devise d'encaissement et taux depuis le TND |
+| `PAIEMENT_MODE` | `simulation` (défaut) ou `paypal` |
 | `PORT`, `CORS_ORIGIN`, `DEVISE` | Réseau et affichage |
 
-Le serveur refuse de démarrer si une variable obligatoire manque ou si la base
-est injoignable, et avertit au lancement si PayPal est en mode `live`.
+**Aucune configuration de paiement n'est nécessaire pour démarrer.** Le serveur
+refuse de démarrer si une variable obligatoire manque ou si la base est
+injoignable.
 
 ---
 
@@ -158,63 +157,57 @@ l'aperçu reste instantané même si le quota de rédaction est épuisé.
 
 ---
 
-## 💳 PayPal
+## 💳 Paiement
 
-L'intégration utilise l'API **Orders v2**. En `sandbox`, le parcours est
-identique à la production mais se déroule sur des comptes de test : **aucun
-argent réel ne circule**. Un bandeau le rappelle sur le catalogue.
+La plateforme accepte deux modes de règlement, choisis par `PAIEMENT_MODE`.
 
-### Page d'arrivée et langue
+### Mode `simulation` — par défaut
 
-Deux réglages de `application_context` évitent des pièges classiques :
+**Aucune configuration, aucun compte externe, aucun débit.** « Commander ce
+rapport » ouvre la page dédiée `/paiement/:id`, qui déroule tout le parcours :
+récapitulatif, saisie du compte PayPal, règlement, barre de progression et
+téléchargement.
 
-| Réglage | Effet |
-|---------|-------|
-| `landing_page: "LOGIN"` | Force la page **de connexion au compte PayPal**. Avec la valeur par défaut (`NO_PREFERENCE`), PayPal choisit lui-même et ouvre souvent le formulaire de **carte bancaire**. Réglé dans `payment_source.paypal.experience_context` (API actuelle ; `application_context` est déprécié). |
-| `locale` (+ `locale` du SDK) | Fixe la langue. Sans lui, PayPal la déduit de l'adresse IP et sert la page en arabe ou en anglais. Réglable par `PAYPAL_LOCALE`. |
+Le montant enregistré dans `paiements.montant` est le **tarif du rapport**, pas
+zéro : une ligne de paiement doit refléter la valeur de ce qui a été commandé.
+L'absence de débit réel est portée par `achats.mode_paiement` et
+`paiements.methode`, et le tableau de bord sépare le chiffre d'affaires réel du
+montant simulé.
 
-### ⚠️ Tester un paiement en sandbox
+L'adresse du compte est enregistrée dans `paiements.email_payeur` (avec le nom
+du titulaire s'il est fourni) et affichée dans la colonne **Compte payeur** du
+tableau de bord : c'est la trace comptable de la commande, la même information
+qu'une transaction PayPal réelle renvoie via `payer.email_address`.
 
-C'est le point qui bloque le plus souvent. **Votre compte PayPal réel ne
-fonctionne pas dans la fenêtre de paiement en mode sandbox** : il faut un
-compte acheteur de test.
+> **Aucun mot de passe n'est demandé ni stocké.** Il n'existe aucune API PayPal
+> permettant de valider un couple email/mot de passe — la redirection vers leur
+> domaine existe précisément pour qu'un marchand ne voie jamais les
+> identifiants de ses clients. Un formulaire qui les collecterait serait
+> techniquement une page de hameçonnage, quelle que soit l'intention.
 
-1. Ouvrir https://developer.paypal.com → **Testing Tools → Sandbox accounts**.
-2. Repérer le compte de type **Personal** (l'acheteur). PayPal en crée un par
-   défaut, du genre `sb-xxxxx@personal.example.com`.
-3. Cliquer sur **⋮ → View/Edit account** pour lire ou changer son mot de passe.
-4. Sur le catalogue, cliquer sur le bouton PayPal, puis se connecter dans la
-   fenêtre avec **ces identifiants de test**.
+C'est le mode de développement et de démonstration : il permet de dérouler
+l'intégralité du parcours du CDC §6 — catalogue, commande, génération,
+téléchargement, espace client — sans dépendre d'un prestataire de paiement.
 
-Le paiement aboutit alors, l'achat passe à `paye` et la génération démarre.
+Ces commandes sont enregistrées avec `achats.mode_paiement = 'simulation'` et
+**exclues du chiffre d'affaires** du tableau de bord : elles y apparaissent
+comptées à part. Sans cette séparation, le revenu affiché serait faux.
 
-> **Symptôme caractéristique d'un email non reconnu :** vous saisissez votre
-> adresse, vous cliquez sur « Suivant », et au lieu de l'écran mot de passe
-> PayPal affiche « Payer par carte bancaire » avec adresse de facturation et
-> date de naissance. Le sandbox ne dit jamais « compte inconnu » — il bascule
-> silencieusement sur l'inscription invité. Vérifié en reproduisant le cas
-> avec une adresse volontairement inexistante : comportement identique.
-> Aucun réglage côté serveur ne change cela, seul l'email compte.
+### Mode `paypal`
 
-### Un seul moyen de paiement
+Transaction réelle via l'API **Orders v2**. À activer en renseignant dans
+`backend/.env` :
 
-Le composant fixe `fundingSource: FUNDING.PAYPAL` : **un seul bouton**, le
-paiement par compte PayPal.
+```
+PAIEMENT_MODE=paypal
+PAYPAL_ENV=sandbox
+PAYPAL_CLIENT_ID=...
+PAYPAL_CLIENT_SECRET=...
+```
 
-Par défaut, le SDK ajoute aussi un bouton « Carte bancaire » qui ouvre le
-paiement **invité** — un parcours distinct, sur lequel `landing_page: LOGIN`
-n'a aucun effet, et qui conduit directement au formulaire de carte. Pour le
-réactiver un jour, retirer la ligne `fundingSource` dans
-`frontend/src/components/PayPalButton.jsx`.
-
-Le composant détruit son instance PayPal au démontage (`close()` puis vidage du
-conteneur). Sans cela, un simple rejeu de l'effet — identité de `config`
-modifiée, double montage de React en développement — empilait un **second jeu
-de boutons** dans le même conteneur.
-
-Si un clic ne produit rien, la cause est presque toujours une **fenêtre
-surgissante bloquée** : autorisez les pop-ups pour `localhost:5173`. Un message
-explicite s'affiche désormais dans la carte du secteur à la place du silence.
+Si `PAIEMENT_MODE=paypal` mais que les identifiants manquent, le serveur
+repasse automatiquement en simulation avec un avertissement au démarrage,
+plutôt que d'afficher un bouton qui échouerait au premier clic.
 
 > **Le dinar tunisien n'est pas une devise acceptée par PayPal.** Les tarifs
 > restent affichés et comptabilisés en TND ; la transaction est présentée à
@@ -222,10 +215,56 @@ explicite s'affiche désormais dans la carte du secteur à la place du silence.
 > `PAYPAL_TAUX_TND`. La carte du catalogue affiche les deux montants.
 > Ce taux est une constante de configuration, à réviser périodiquement.
 
-Pour passer en production : créer des identifiants **Live** sur
-developer.paypal.com, les placer dans `backend/.env` et basculer
-`PAYPAL_ENV=live`. Le serveur affiche alors un avertissement au démarrage.
+Réglages appliqués à la commande, dans
+`payment_source.paypal.experience_context` (API actuelle ;
+`application_context` est déprécié) :
 
+| Réglage | Effet |
+|---------|-------|
+| `landing_page: "LOGIN"` | Ouvre la page **de connexion au compte PayPal**. Avec la valeur par défaut (`NO_PREFERENCE`), PayPal choisit lui-même et ouvre souvent le formulaire de carte bancaire. |
+| `locale` | Fixe la langue. Sans lui, PayPal la déduit de l'adresse IP et sert la page en arabe ou en anglais. |
+
+Le composant fixe aussi `fundingSource: FUNDING.PAYPAL` : **un seul bouton**.
+Par défaut le SDK ajoute un bouton « Carte bancaire » qui ouvre le paiement
+invité — un parcours distinct, sur lequel `landing_page` n'a aucun effet.
+
+#### Tester en sandbox
+
+**Votre compte PayPal réel ne fonctionne pas en mode sandbox.** Le bac à sable
+est un univers séparé qui ne contient que des comptes fictifs.
+
+1. https://developer.paypal.com → **Testing Tools → Sandbox accounts**
+2. Prendre le compte de type **Personal** (`sb-xxxxx@personal.example.com`)
+3. **⋮ → View/Edit account** pour lire ou définir son mot de passe
+4. Utiliser ces identifiants dans la fenêtre PayPal
+
+> **Symptôme d'un email non reconnu :** vous saisissez votre adresse, cliquez
+> sur « Suivant », et au lieu de l'écran mot de passe PayPal affiche « Payer
+> par carte bancaire » avec adresse de facturation et date de naissance. Le
+> sandbox ne dit jamais « compte inconnu » — il bascule silencieusement sur
+> l'inscription invité. Aucun réglage serveur ne change cela, seul l'email
+> compte.
+
+Testez en **navigation privée** : PayPal mémorise les tentatives précédentes en
+cookie et peut vous renvoyer au parcours invité même avec le bon compte.
+
+#### Passer en production
+
+Créer des identifiants **Live** sur developer.paypal.com, les placer dans
+`backend/.env` et basculer `PAYPAL_ENV=live`. Le serveur affiche alors un
+avertissement au démarrage.
+
+### Piège de mise en page à connaître
+
+Les cellules de tableau sont tronquées **en amont**, par mesure du texte
+(`theme.tronquer`). L'option `lineBreak: false` de PDFKit ne fait pas ce que sa
+documentation laisse entendre : mesuré, un libellé de 172 pt placé dans une
+colonne de 76 pt occupe 28,8 pt de hauteur — trois lignes — avec ou sans
+l'option. Des lignes de tableau à hauteur fixe se chevauchaient donc, et un
+libellé long poussait le reste de sa ligne sur la page suivante, produisant des
+pages presque vides.
+
+Toute nouvelle cellule de tableau doit passer par `tronquer()`.
 ---
 
 ## 📄 Structure du rapport (CDC §5)
@@ -340,6 +379,12 @@ dans l'ordre numérique.
   zones, acteurs et textes réglementaires, séries statistiques avec leurs
   estimations, **Recalculer les projections** et **Régénérer le rapport** (avec
   suivi de progression).
+- **Rapports** — relecture et correction du texte d'un rapport déjà produit
+  (`/admin/rapports/:id`), puis reconstruction du PDF. **Aucun appel au modèle
+  n'est refait** : une régénération complète écraserait les corrections. Les
+  sections chiffrées, elles, sont relues en base, donc le document repart des
+  valeurs à jour. Utile notamment quand le quota de rédaction est épuisé : le
+  rapport sort avec ses sections chiffrées, et le texte se saisit à la main.
 - **Comptes** — liste des comptes et gestion des rôles.
 
 Enregistrer des chiffres clés rafraîchit automatiquement la date de mise à jour
@@ -351,7 +396,7 @@ affichée au catalogue.
 
 | Sujet | État |
 |-------|------|
-| **PayPal en production** | L'intégration est complète et fonctionnelle ; seul le passage `PAYPAL_ENV=live` avec des identifiants Live reste à faire. Le taux TND → EUR est figé en configuration. |
+| **Paiement réel** | La plateforme tourne en mode `simulation` par défaut : aucun encaissement. L'intégration PayPal est complète et testée, il reste à fournir des identifiants et basculer `PAIEMENT_MODE=paypal`. Le taux TND → EUR est figé en configuration. |
 | **Vérification d'email** | La colonne `est_verifie` existe mais aucun email de confirmation n'est envoyé à l'inscription. |
 | **Suivi des générations** | En mémoire (`jobStore`) : un job ne survit pas à un redémarrage du serveur. Le PDF produit, lui, est bien persisté. |
 | **Achat sans compte** | Techniquement possible (`id_utilisateur` NULL) mais l'interface impose la connexion, afin que le rapport soit retrouvable dans « Mes rapports ». |
@@ -378,7 +423,7 @@ affichée au catalogue.
 | `Variables d'environnement manquantes` | `.env` absent ou incomplet | Copier `backend/.env.example` |
 | `Connexion PostgreSQL impossible` | URL Neon invalide | Vérifier `DATABASE_URL` |
 | `GROQ_API_KEY absente` (avertissement) | Clé non configurée | Les sections rédigées restent vides ; le reste fonctionne |
-| `Paiement indisponible` | Identifiants PayPal absents | Renseigner `PAYPAL_CLIENT_ID` et `PAYPAL_CLIENT_SECRET` |
+| `Paiement indisponible` | `PAIEMENT_MODE=paypal` sans identifiants | Renseigner les identifiants, ou revenir à `PAIEMENT_MODE=simulation` |
 | `Payer has not yet approved the Order` | Capture appelée avant approbation | Passer par le bouton PayPal, qui enchaîne les deux étapes |
 | `Accès réservé aux administrateurs` | Compte client sur une route admin | Faire promouvoir le compte depuis **Comptes** |
 | `Serveur injoignable` côté React | Backend arrêté | `cd backend && npm run dev` |

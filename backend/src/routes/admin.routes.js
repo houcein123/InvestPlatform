@@ -159,6 +159,36 @@ router.post("/projections", asyncHandler(async (req, res) => {
     res.json({ success: true, ...resultat });
 }));
 
+// ── Édition d'un rapport déjà produit ──────────────────────────────────────
+
+/**
+ * Le texte d'un rapport généré reste modifiable : un relecteur corrige les
+ * sections rédigées et le PDF est reconstruit à l'identique pour le reste.
+ * Aucun appel au modèle n'est refait, sans quoi les corrections seraient
+ * écrasées.
+ */
+router.get("/rapports", asyncHandler(async (req, res) => {
+    res.json({ rapports: await reportService.listReports() });
+}));
+
+router.get("/rapports/:rapportId", asyncHandler(async (req, res) => {
+    const rapport = await reportService.getReport(req.params.rapportId);
+    if (!rapport) throw new HttpError(404, "Rapport non trouvé");
+    res.json({ rapport });
+}));
+
+router.put("/rapports/:rapportId", asyncHandler(async (req, res) => {
+    const { narratives } = req.body;
+    if (!narratives || typeof narratives !== "object") {
+        throw new HttpError(400, "Le champ `narratives` est requis");
+    }
+
+    const resultat = await reportService.updateReportNarratives(req.params.rapportId, narratives);
+    if (!resultat) throw new HttpError(404, "Rapport non trouvé");
+
+    res.json({ success: true, pdfUrl: resultat.pdf.url, filename: resultat.pdf.filename });
+}));
+
 // ── Comptes (CDC §7) ───────────────────────────────────────────────────────
 
 router.get("/comptes", asyncHandler(async (req, res) => {
@@ -209,13 +239,20 @@ router.get("/systeme", asyncHandler(async (req, res) => {
             configure: groqService.isConfigured,
             modele: groqService.model,
         },
-        paiement: {
-            configure: paypal.configure,
-            environnement: paypal.environnement,
-            devisePaiement: paypal.devise,
-            tauxConversion: paypal.tauxTND,
-            argentReel: paypal.argentReel,
-        },
+        paiement: config.paiementMode === "simulation"
+            ? {
+                mode: "simulation",
+                configure: true,
+                argentReel: false,
+            }
+            : {
+                mode: "paypal",
+                configure: paypal.configure,
+                environnement: paypal.environnement,
+                devisePaiement: paypal.devise,
+                tauxConversion: paypal.tauxTND,
+                argentReel: paypal.argentReel,
+            },
         rapports: {
             sections: require("../pdf/sections").SECTION_CATALOG.length,
             pagesMin: require("../pdf/sections").MIN_PAGE_COUNT,

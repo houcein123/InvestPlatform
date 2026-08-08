@@ -92,11 +92,11 @@ export default function Parametres() {
             <div>
               <dt>Paiement</dt>
               <dd>
-                <span className={`badge ${systeme.paiement.configure ? 'badge--on' : 'badge--off'}`}>
-                  {systeme.paiement.configure ? 'PayPal configuré' : 'Non configuré'}
+                <span className="badge badge--info">
+                  {systeme.paiement.mode === 'simulation' ? 'Mode démonstration' : 'PayPal'}
                 </span>
-                <span className={`badge ${systeme.paiement.argentReel ? 'badge--off' : 'badge--info'}`}>
-                  {systeme.paiement.argentReel ? 'Production — argent réel' : 'Sandbox — aucun argent réel'}
+                <span className={`badge ${systeme.paiement.argentReel ? 'badge--off' : 'badge--on'}`}>
+                  {systeme.paiement.argentReel ? 'Production — argent réel' : 'Aucun montant débité'}
                 </span>
               </dd>
             </div>
@@ -104,8 +104,14 @@ export default function Parametres() {
             <div>
               <dt>Devise</dt>
               <dd>
-                Affichage en {systeme.devise} · encaissement en {systeme.paiement.devisePaiement}
-                <span className="muted"> (taux {systeme.paiement.tauxConversion})</span>
+                {systeme.paiement.mode === 'simulation' ? (
+                  <>Affichage en {systeme.devise}</>
+                ) : (
+                  <>
+                    Affichage en {systeme.devise} · encaissement en {systeme.paiement.devisePaiement}
+                    <span className="muted"> (taux {systeme.paiement.tauxConversion})</span>
+                  </>
+                )}
               </dd>
             </div>
 

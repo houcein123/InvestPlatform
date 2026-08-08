@@ -23,8 +23,15 @@ const config = {
     groqApiKey: process.env.GROQ_API_KEY,
     groqModel: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
 
-    // ── PayPal ──
-    // `sandbox` = comptes de test, aucun argent réel. `live` = paiements réels.
+    // ── Paiement ──
+    // 'simulation' : validation locale, aucun débit, aucune configuration
+    //                externe. C'est le mode par défaut, celui du développement
+    //                et des démonstrations.
+    // 'paypal'     : transaction PayPal réelle. N'est retenu que si les
+    //                identifiants sont effectivement présents (voir plus bas).
+    paiementMode: process.env.PAIEMENT_MODE === "paypal" ? "paypal" : "simulation",
+
+    // ── PayPal (facultatif — requis uniquement si PAIEMENT_MODE=paypal) ──
     paypalEnv: process.env.PAYPAL_ENV === "live" ? "live" : "sandbox",
     paypalClientId: process.env.PAYPAL_CLIENT_ID,
     paypalClientSecret: process.env.PAYPAL_CLIENT_SECRET,
@@ -32,8 +39,6 @@ const config = {
     // TND et la transaction est présentée dans cette devise, à ce taux.
     paypalCurrency: process.env.PAYPAL_CURRENCY || "EUR",
     paypalTauxTND: Number(process.env.PAYPAL_TAUX_TND) || 0.29,
-    // Sans cette valeur, PayPal déduit la langue de l'adresse IP et sert
-    // parfois la page de paiement en arabe ou en anglais.
     paypalLocale: process.env.PAYPAL_LOCALE || "fr_FR",
 
     // Devise d'affichage et de comptabilité du catalogue
@@ -53,10 +58,16 @@ function assertConfig() {
     if (!config.groqApiKey) {
         console.warn("⚠️  GROQ_API_KEY absente — les sections rédigées du rapport seront indisponibles.");
     }
-    if (!config.paypalClientId || !config.paypalClientSecret) {
-        console.warn("⚠️  Identifiants PayPal absents — le paiement sera indisponible.");
-    } else if (config.paypalEnv === "live") {
-        console.warn("🔴 PAYPAL_ENV=live — les paiements débiteront de l'argent réel.");
+    if (config.paiementMode === "paypal") {
+        if (!config.paypalClientId || !config.paypalClientSecret) {
+            // On ne laisse pas la plateforme démarrer dans un mode qu'elle ne
+            // peut pas honorer : le repli explicite vaut mieux qu'un bouton
+            // de paiement qui échouerait au premier clic.
+            console.warn("⚠️  PAIEMENT_MODE=paypal mais identifiants absents — repli sur le mode simulation.");
+            config.paiementMode = "simulation";
+        } else if (config.paypalEnv === "live") {
+            console.warn("🔴 PAYPAL_ENV=live — les paiements débiteront de l'argent réel.");
+        }
     }
 }
 

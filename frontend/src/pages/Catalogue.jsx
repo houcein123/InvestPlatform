@@ -100,13 +100,6 @@ export default function Catalogue() {
         </aside>
       </section>
 
-      {paypalConfig?.configure && !paypalConfig.argentReel && (
-        <p className="bandeau-test">
-          Environnement de test : les paiements se déroulent sur le bac à sable PayPal,
-          aucun montant réel n'est débité.
-        </p>
-      )}
-
       {erreur && <p className="alert alert--error">{erreur}</p>}
 
       {/* ── Catalogue ── */}

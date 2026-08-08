@@ -182,4 +182,90 @@ async function generatePreview(sectorId) {
     return generatePreviewPDF(data);
 }
 
-module.exports = { generateFullReport, generatePreview, generateNarratives, SECTION_KEYS };
+/** Liste des rapports produits, pour l'écran d'édition du panneau admin. */
+async function listReports(limit = 50) {
+    const { rows } = await pool.query(
+        `SELECT r.id, r.titre, r.chemin_fichier, r.statut, r.date_generation,
+                s.nom AS secteur, s.id AS secteur_id
+           FROM rapports r
+           JOIN secteurs s ON s.id = r.secteur_id
+       ORDER BY r.date_generation DESC NULLS LAST
+          LIMIT $1`,
+        [limit]
+    );
+    return rows;
+}
+
+/** Un rapport et le texte de ses sections rédigées. */
+async function getReport(rapportId) {
+    const { rows } = await pool.query(
+        `SELECT r.*, s.nom AS secteur_nom
+           FROM rapports r
+           JOIN secteurs s ON s.id = r.secteur_id
+          WHERE r.id = $1`,
+        [rapportId]
+    );
+    if (rows.length === 0) return null;
+
+    const rapport = rows[0];
+    return {
+        id: rapport.id,
+        secteurId: rapport.secteur_id,
+        secteur: rapport.secteur_nom,
+        titre: rapport.titre,
+        cheminFichier: rapport.chemin_fichier,
+        dateGeneration: rapport.date_generation,
+        // `contenu_ia` est stocké en JSONB : selon le pilote, il revient déjà
+        // désérialisé ou sous forme de chaîne.
+        narratives: typeof rapport.contenu_ia === "string"
+            ? JSON.parse(rapport.contenu_ia)
+            : (rapport.contenu_ia || {}),
+        sections: SECTION_KEYS,
+    };
+}
+
+/**
+ * Réécrit le PDF d'un rapport à partir de textes corrigés à la main.
+ *
+ * Aucun appel au modèle : c'est précisément l'intérêt de cette fonction, un
+ * relecteur peut amender la rédaction sans risquer qu'une régénération
+ * remplace ses corrections. Les données chiffrées, elles, sont relues en base
+ * afin que le document reparte des valeurs à jour.
+ */
+async function updateReportNarratives(rapportId, narrativesModifiees) {
+    const rapport = await getReport(rapportId);
+    if (!rapport) return null;
+
+    const data = await sectorRepository.getSectorData(rapport.secteurId);
+    if (!data) return null;
+
+    // Seules les clés connues sont retenues, et un texte vide efface la section.
+    const narratives = { ...rapport.narratives };
+    for (const cle of SECTION_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(narrativesModifiees, cle)) {
+            const valeur = narrativesModifiees[cle];
+            narratives[cle] = valeur && String(valeur).trim() ? String(valeur) : null;
+        }
+    }
+
+    const pdf = await generateReportPDF({ ...data, narratives, modeleIA: groqService.model });
+
+    await pool.query(
+        `UPDATE rapports
+            SET contenu_ia = $1, chemin_fichier = $2, date_generation = CURRENT_TIMESTAMP
+          WHERE id = $3`,
+        [JSON.stringify(narratives), pdf.url, rapportId]
+    );
+
+    return { pdf, rapportId, narratives };
+}
+
+module.exports = {
+    generateFullReport,
+    generatePreview,
+    generateNarratives,
+    listReports,
+    getReport,
+    updateReportNarratives,
+    SECTION_KEYS,
+};

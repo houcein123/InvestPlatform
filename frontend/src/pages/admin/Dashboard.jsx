@@ -51,6 +51,16 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Les commandes de démonstration ne sont jamais mêlées au chiffre
+          d'affaires : elles sont comptées à part pour rester lisibles. */}
+      {stats.totaux.nb_ventes_simulees > 0 && (
+        <p className="alert alert--info" style={{ marginTop: 20 }}>
+          {stats.totaux.nb_ventes_simulees} commande(s) en mode démonstration, représentant{' '}
+          {stats.totaux.revenu_simule.toFixed(2)} {stats.devise} — comptabilisées à part du
+          chiffre d'affaires ci-dessus, aucun montant n'ayant réellement été débité.
+        </p>
+      )}
+
       {/* ── Répartition par secteur ── */}
       <div className="card">
         <div className="row-between">
@@ -89,8 +99,8 @@ export default function Dashboard() {
                 <tr>
                   <th>Secteur</th>
                   <th>Client</th>
+                  <th>Compte payeur</th>
                   <th>Généré le</th>
-                  <th>Statut</th>
                   <th>Fichier</th>
                 </tr>
               </thead>
@@ -99,12 +109,17 @@ export default function Dashboard() {
                   <tr key={rapport.id}>
                     <td><strong>{rapport.secteur}</strong></td>
                     <td className="muted">{rapport.client || 'Achat sans compte'}</td>
+                    <td className="muted">
+                      {rapport.email_payeur || '—'}
+                      {rapport.methode === 'simulation' && (
+                        <span className="badge badge--info" style={{ marginLeft: 6 }}>démo</span>
+                      )}
+                    </td>
                     <td>
                       {rapport.date_generation
                         ? new Date(rapport.date_generation).toLocaleString('fr-FR')
                         : '—'}
                     </td>
-                    <td><span className="badge badge--info">{rapport.statut}</span></td>
                     <td>
                       {rapport.chemin_fichier ? (
                         <a href={fileUrl(rapport.chemin_fichier)} target="_blank" rel="noreferrer">

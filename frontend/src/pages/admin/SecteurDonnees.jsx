@@ -42,8 +42,14 @@ export default function SecteurDonnees() {
   const [pdfUrl, setPdfUrl] = useState(null);
   const [projectionEnCours, setProjectionEnCours] = useState(false);
 
+  // Remis à true à chaque montage : React monte les composants deux fois en
+  // développement, et le nettoyage du premier montage figeait sinon le drapeau
+  // à false, ce qui bloquait le suivi de progression à 0 %.
   const monte = useRef(true);
-  useEffect(() => () => { monte.current = false; }, []);
+  useEffect(() => {
+    monte.current = true;
+    return () => { monte.current = false; };
+  }, []);
 
   const recharger = () => api.adminSecteur(id).then(setDonnees);
 

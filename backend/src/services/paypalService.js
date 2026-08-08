@@ -145,6 +145,7 @@ async function captureOrder(orderId) {
 
     const unite = resultat.purchase_units?.[0];
     const capture = unite?.payments?.captures?.[0];
+    const payeur = resultat.payer;
 
     return {
         transactionId: capture?.id || resultat.id,
@@ -152,6 +153,10 @@ async function captureOrder(orderId) {
         montant: Number(capture?.amount?.value ?? 0),
         devise: capture?.amount?.currency_code || config.paypalCurrency,
         achatId: unite?.custom_id ? Number(unite.custom_id) : null,
+        // Coordonnées renvoyées par PayPal : authentifiées, à préférer à toute
+        // saisie faite dans le navigateur.
+        emailPayeur: payeur?.email_address || null,
+        nomPayeur: [payeur?.name?.given_name, payeur?.name?.surname].filter(Boolean).join(" ") || null,
     };
 }
 

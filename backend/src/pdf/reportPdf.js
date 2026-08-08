@@ -42,6 +42,7 @@ const {
     stripInlineMarkdown,
     humanizeType,
     contentWidth,
+    tronquer,
     ensureSpace,
     withoutBottomMargin,
     drawHeaderFooter,
@@ -262,7 +263,7 @@ function hasProjection(row) {
 
 function drawIndicatorChart(doc, { x, y, width, height, title, unit, years, values, isProjection }) {
     doc.font("Helvetica-Bold").fontSize(9.5).fillColor(COLORS.text)
-        .text(title, x, y, { width: width - 46, lineBreak: false, ellipsis: true });
+        .text(tronquer(doc, title, width - 46), x, y, { width: width - 46 });
     if (unit) {
         doc.font("Helvetica").fontSize(7.5).fillColor(COLORS.textLight)
             .text(unit, x + width - 90, y + 1, { width: 90, align: "right", lineBreak: false });
@@ -350,38 +351,56 @@ function derniereObservation(row) {
     return null;
 }
 
+/** Hauteur d'une ligne de tableau. Constante : chaque cellule tient sur une ligne. */
+const ROW_H = 21;
+
+/**
+ * Tableau récapitulatif des séries statistiques.
+ *
+ * La colonne « source » a été retirée : les libellés de l'INS y dépassent
+ * régulièrement 170 pt pour une colonne de 76, ce qui les rendait illisibles
+ * une fois tronqués. Les sources sont de toute façon listées intégralement en
+ * section 12, où elles ont la place de s'afficher.
+ */
 function drawStatisticsTable(doc, rows) {
     if (!rows || rows.length === 0) return;
     const startX = doc.page.margins.left;
     const width = contentWidth(doc);
 
     const colonnes = [
-        { label: "INDICATEUR", largeur: 0.40 },
+        { label: "INDICATEUR", largeur: 0.52 },
         { label: "UNITÉ", largeur: 0.15 },
-        { label: "DERNIÈRE VALEUR", largeur: 0.16, align: "right" },
-        { label: "EST. 2028", largeur: 0.13, align: "right" },
-        { label: "SOURCE", largeur: 0.16 },
+        { label: "DERNIÈRE VALEUR", largeur: 0.17, align: "right" },
+        { label: "EST. 2028", largeur: 0.16, align: "right" },
     ];
 
-    ensureSpace(doc, 26);
-    doc.x = startX;
-    const headerY = doc.y;
-    doc.rect(startX, headerY, width, 22).fill(COLORS.surface);
-    doc.font("Helvetica-Bold").fontSize(8).fillColor(COLORS.textMuted);
+    const dessinerEntete = () => {
+        const headerY = doc.y;
+        doc.rect(startX, headerY, width, ROW_H).fill(COLORS.surface);
+        doc.font("Helvetica-Bold").fontSize(7.6).fillColor(COLORS.textMuted);
+        let cx = startX;
+        colonnes.forEach((col) => {
+            const w = col.largeur * width;
+            doc.text(col.label, cx + 8, headerY + 7, { width: w - 12, align: col.align || "left" });
+            cx += w;
+        });
+        doc.y = headerY + ROW_H;
+        doc.x = startX;
+    };
 
-    let cx = startX;
-    colonnes.forEach((col) => {
-        const w = col.largeur * width;
-        doc.text(col.label, cx + 8, headerY + 7, { width: w - 12, align: col.align || "left", lineBreak: false });
-        cx += w;
-    });
-    doc.y = headerY + 22;
+    ensureSpace(doc, ROW_H * 3);
     doc.x = startX;
+    dessinerEntete();
 
     rows.forEach((row, i) => {
-        ensureSpace(doc, 24);
+        // Une ligne ne doit jamais être coupée en deux pages : on réserve la
+        // place AVANT de dessiner, et l'en-tête est répété sur la nouvelle page.
+        const avant = doc.y;
+        ensureSpace(doc, ROW_H + 2);
+        if (doc.y !== avant) dessinerEntete();
+
         const rowY = doc.y;
-        if (i % 2 === 1) doc.rect(startX, rowY, width, 22).fill(COLORS.borderLight);
+        if (i % 2 === 1) doc.rect(startX, rowY, width, ROW_H).fill(COLORS.borderLight);
 
         const derniere = derniereObservation(row);
         const estimation = row.projection_2028;
@@ -399,21 +418,20 @@ function drawStatisticsTable(doc, rows) {
                 texte: estimation !== null && estimation !== undefined ? formatNumber(estimation) : "—",
                 couleur: COLORS.primary, align: "right",
             },
-            { texte: row.source || "-", couleur: COLORS.textMuted },
         ];
 
-        cx = startX;
+        let cx = startX;
         colonnes.forEach((col, index) => {
             const w = col.largeur * width;
             const cellule = cellules[index];
-            doc.font(cellule.gras ? "Helvetica-Bold" : "Helvetica").fontSize(8.3).fillColor(cellule.couleur)
-                .text(cellule.texte, cx + 8, rowY + 6, {
-                    width: w - 12, align: cellule.align || "left", lineBreak: false, ellipsis: true,
-                });
+            doc.font(cellule.gras ? "Helvetica-Bold" : "Helvetica").fontSize(8.2).fillColor(cellule.couleur);
+            doc.text(tronquer(doc, cellule.texte, w - 14), cx + 8, rowY + 6.5, {
+                width: w - 12, align: cellule.align || "left",
+            });
             cx += w;
         });
 
-        doc.y = rowY + 22;
+        doc.y = rowY + ROW_H;
         doc.x = startX;
     });
     doc.moveDown(0.4);
@@ -542,8 +560,12 @@ function drawTable(doc, { columns, rows, emptyMessage }) {
             const w = col.width * width;
             const value = col.render ? col.render(row) : String(row[col.key] ?? "-");
             doc.font(col.bold ? "Helvetica-Bold" : "Helvetica").fontSize(8.3)
-                .fillColor(col.color ? col.color(row) : COLORS.text)
-                .text(value, cx + 10, y + 6.5, { width: w - 14, align: col.align || "left", lineBreak: false, ellipsis: true });
+                .fillColor(col.color ? col.color(row) : COLORS.text);
+            // Troncature mesurée : `lineBreak: false` ne suffit pas à empêcher
+            // le retour à la ligne, qui ferait déborder la ligne suivante.
+            doc.text(tronquer(doc, value, w - 16), cx + 10, y + 6.5, {
+                width: w - 14, align: col.align || "left",
+            });
             cx += w;
         });
         doc.y = y + 22;
@@ -608,7 +630,8 @@ function drawCadreCard(doc, item) {
     const { startX, width, top } = drawCardShell(doc, baseH + detailH);
 
     doc.font("Helvetica-Bold").fontSize(11.5).fillColor(COLORS.text)
-        .text(item.titre || "Texte réglementaire", startX + padX, top + 12, { width: width - padX * 2 - 200, lineBreak: false, ellipsis: true });
+        .text(tronquer(doc, item.titre || "Texte réglementaire", width - padX * 2 - 200),
+            startX + padX, top + 12, { width: width - padX * 2 - 200 });
 
     let bx = startX + width - padX;
     const statusLabel = item.est_en_vigueur === false ? "Historique" : "En vigueur";
@@ -658,7 +681,8 @@ function drawZoneCard(doc, zone) {
     }
 
     doc.font("Helvetica-Bold").fontSize(11.5).fillColor(COLORS.text)
-        .text(zone.nom || "Zone", startX + padX, top + 12, { width: width - padX * 2 - 150, lineBreak: false, ellipsis: true });
+        .text(tronquer(doc, zone.nom || "Zone", width - padX * 2 - 150),
+            startX + padX, top + 12, { width: width - padX * 2 - 150 });
 
     let bx = startX + width - padX;
     if (zone.type) {
@@ -875,7 +899,7 @@ function buildCoverPage(doc, report, { isPreview = false } = {}) {
         const cy = col === 0 ? leftY : rightY;
         doc.circle(cx + 2.5, cy + 5.5, 2).fill(COLORS.primaryLight);
         doc.font("Helvetica").fontSize(9.7).fillColor(COLORS.text)
-            .text(title, cx + 13, cy, { width: colW - 13, height: 13, lineBreak: false, ellipsis: true });
+            .text(tronquer(doc, title, colW - 15), cx + 13, cy, { width: colW - 13 });
         if (col === 0) leftY += 23; else rightY += 23;
     });
     doc.y = Math.max(leftY, rightY) + 14;

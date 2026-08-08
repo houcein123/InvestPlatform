@@ -83,7 +83,8 @@ export const api = {
     // ── Paiement PayPal (CDC §6, étape 2) ──
     paymentConfig: () => request("/payment/config", { auth: false }),
     createOrder: (sectorId) => request("/payment/create-order", { method: "POST", body: { sectorId } }),
-    capturePayment: (orderId, achatId) => request("/payment/capture", { method: "POST", body: { orderId, achatId } }),
+    capturePayment: (orderId, achatId, payeur = {}) =>
+        request("/payment/capture", { method: "POST", body: { orderId, achatId, ...payeur } }),
 
     // ── Génération (CDC §6, étape 3) ──
     generateReport: (sectorId, achatId) => request("/report/generate", { method: "POST", body: { sectorId, achatId } }),
@@ -102,6 +103,11 @@ export const api = {
     createActeur: (id, payload) => request(`/admin/secteurs/${id}/acteurs`, { method: "POST", body: payload }),
     createCadre: (id, payload) => request(`/admin/secteurs/${id}/cadre`, { method: "POST", body: payload }),
     deleteItem: (kind, itemId) => request(`/admin/${kind}/${itemId}`, { method: "DELETE" }),
+
+    rapports: () => request("/admin/rapports"),
+    rapport: (rapportId) => request(`/admin/rapports/${rapportId}`),
+    updateRapport: (rapportId, narratives) =>
+        request(`/admin/rapports/${rapportId}`, { method: "PUT", body: { narratives } }),
 
     regenerer: (id) => request(`/admin/secteurs/${id}/regenerer`, { method: "POST" }),
     recalculerProjections: (id) => request(`/admin/secteurs/${id}/projections`, { method: "POST" }),

@@ -14,6 +14,7 @@ const MENU_ADMIN = [
     liens: [
       { to: '/admin', libelle: 'Tableau de bord', icone: '📊', exact: true },
       { to: '/admin/secteurs', libelle: 'Secteurs', icone: '🗂️' },
+      { to: '/admin/rapports', libelle: 'Rapports', icone: '📄' },
       { to: '/admin/comptes', libelle: 'Comptes', icone: '👥' },
     ],
   },
