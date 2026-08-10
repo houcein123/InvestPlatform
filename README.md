@@ -386,7 +386,7 @@ Recalcul depuis le panneau de contrôle (**Secteurs → Données → Recalculer 
 projections**) ou par l'API `POST /api/admin/projections`. À relancer après
 chaque mise à jour des séries.
 
----
+--
 
 ## 🛠️ Base de données
 
