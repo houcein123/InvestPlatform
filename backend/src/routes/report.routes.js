@@ -80,10 +80,30 @@ router.get("/status/:jobId", (req, res) => {
     res.json({ job });
 });
 
-/** Espace client : les rapports achetés (CDC §6, étape 4). */
+/** Espace client : les achats et leurs rapports (CDC §6, étape 4). */
 router.get("/mes-rapports", requireAuth, asyncHandler(async (req, res) => {
-    const rapports = await salesService.listUserReports(req.compte.id);
-    res.json({ rapports });
+    const achats = await salesService.listUserPurchases(req.compte.id);
+    res.json({ achats });
+}));
+
+/**
+ * Relance la génération d'un achat déjà payé dont le rapport manque.
+ * Aucun nouveau paiement : le droit vient de l'achat, qui est vérifié en base.
+ */
+router.post("/relancer", requireAuth, asyncHandler(async (req, res) => {
+    const { achatId } = req.body;
+    if (!achatId) throw new HttpError(400, "achatId est obligatoire");
+
+    const achat = await reportService.findAchatRegenerable(achatId, req.compte.id);
+    if (!achat) throw new HttpError(404, "Achat introuvable ou non réglé");
+
+    const jobId = jobStore.createJob(achat.id_secteur);
+    runGenerationJob(jobId, achat.id_secteur, {
+        achatId: achat.id,
+        utilisateurId: req.compte.id,
+    });
+
+    res.status(202).json({ success: true, jobId, message: "Génération relancée" });
 }));
 
 module.exports = router;

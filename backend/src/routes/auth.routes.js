@@ -12,9 +12,28 @@ const jwt = require("jsonwebtoken");
 const { config } = require("../config/env");
 const accountRepository = require("../services/accountRepository");
 const { requireAuth } = require("../middleware/auth");
+const { rateLimit } = require("../middleware/rateLimit");
 const { asyncHandler, HttpError } = require("../middleware/errorHandler");
 
 const router = express.Router();
+
+// bcrypt ralentit chaque vérification mais n'empêche pas d'en enchaîner des
+// milliers : sans plafond, l'essai systématique de mots de passe reste ouvert.
+const limiteConnexion = rateLimit({
+    fenetreMs: 15 * 60 * 1000,
+    max: 10,
+    message: "Trop de tentatives de connexion. Réessayez dans quelques minutes.",
+});
+
+const limiteInscription = rateLimit({
+    fenetreMs: 60 * 60 * 1000,
+    max: 5,
+    message: "Trop de comptes créés depuis cette adresse. Réessayez plus tard.",
+});
+
+// Le changement de mot de passe exige le mot de passe actuel : c'est un point
+// d'essai systématique au même titre que la connexion.
+const limiteMotDePasse = rateLimit({ fenetreMs: 15 * 60 * 1000, max: 10 });
 
 const LONGUEUR_MIN_MOT_DE_PASSE = 8;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -28,7 +47,7 @@ function signerJeton(compte) {
 }
 
 /** Inscription publique — crée un compte client. */
-router.post("/register", asyncHandler(async (req, res) => {
+router.post("/register", limiteInscription, asyncHandler(async (req, res) => {
     const { email, mot_de_passe, nom, prenom, entreprise, pays, telephone } = req.body;
 
     if (!email || !mot_de_passe || !nom || !prenom) {
@@ -54,7 +73,7 @@ router.post("/register", asyncHandler(async (req, res) => {
 }));
 
 /** Connexion — identique pour un client et un administrateur. */
-router.post("/login", asyncHandler(async (req, res) => {
+router.post("/login", limiteConnexion, asyncHandler(async (req, res) => {
     const { email, mot_de_passe } = req.body;
     if (!email || !mot_de_passe) throw new HttpError(400, "Email et mot de passe requis");
 
@@ -86,7 +105,7 @@ router.put("/profil", requireAuth, asyncHandler(async (req, res) => {
 }));
 
 /** Changement de mot de passe — l'actuel est exigé. */
-router.put("/mot-de-passe", requireAuth, asyncHandler(async (req, res) => {
+router.put("/mot-de-passe", limiteMotDePasse, requireAuth, asyncHandler(async (req, res) => {
     const { mot_de_passe_actuel, nouveau_mot_de_passe } = req.body;
 
     if (!mot_de_passe_actuel || !nouveau_mot_de_passe) {

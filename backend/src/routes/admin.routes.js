@@ -138,6 +138,26 @@ router.post("/secteurs/:id/regenerer", asyncHandler(async (req, res) => {
     res.status(202).json({ success: true, jobId, message: "Régénération démarrée" });
 }));
 
+// ── Comparatif régional (CDC §4) ───────────────────────────────────────────
+
+/**
+ * Ces valeurs sont les SEULES données étrangères que le rapport publie.
+ * Elles se saisissent ici, sourcées, et ne sont jamais produites par le
+ * modèle de langage.
+ */
+router.get("/secteurs/:id/benchmarks", asyncHandler(async (req, res) => {
+    res.json({
+        benchmarks: await sectorRepository.listBenchmarks(req.params.id),
+        champs: sectorRepository.BENCHMARK_FIELDS,
+    });
+}));
+
+router.put("/benchmarks/:benchmarkId", asyncHandler(async (req, res) => {
+    const ligne = await sectorRepository.updateBenchmark(req.params.benchmarkId, req.body);
+    if (!ligne) throw new HttpError(404, "Indicateur comparatif non trouvé");
+    res.json({ benchmark: ligne });
+}));
+
 // ── Projections statistiques ───────────────────────────────────────────────
 
 /**

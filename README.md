@@ -21,6 +21,12 @@ cd backend && npm install && npm run dev
 cd frontend && npm install && npm run dev
 ```
 
+Tests de la logique métier (projections, mise en page PDF, prompts) :
+
+```bash
+cd backend && npm test
+```
+
 Le frontend est servi sur http://localhost:5173, l'API sur http://localhost:3001.
 En développement, le proxy Vite redirige `/api` et `/reports` vers le backend :
 aucune URL de backend n'est écrite en dur dans le code React.
@@ -294,6 +300,28 @@ un modèle de langage, **sauf dans « Sources et méthodologie »**, où le proc
 et le modèle employé sont décrits explicitement. C'est le seul endroit prévu
 pour cette mention.
 
+### Comparatif régional : aucune valeur inventée
+
+Le CDC §4 exige une comparaison avec le Maroc et l'Égypte. Or le contexte
+transmis au modèle ne contenait **que des chiffres tunisiens** : il devait donc
+produire lui-même toutes les valeurs marocaines et égyptiennes, dans un rapport
+vendu.
+
+La table `benchmarks_regionaux` fournit l'emplacement de ces données, une
+grille de trois indicateurs par secteur, **livrée vide**. Deux garanties :
+
+- seules les lignes réellement renseignées sont transmises au modèle, avec leur
+  source ;
+- quand aucune ne l'est, le prompt le dit explicitement et impose de traiter la
+  comparaison en termes qualitatifs — « n'avance AUCUNE valeur chiffrée
+  concernant le Maroc ou l'Égypte qui ne figure pas dans le comparatif ».
+
+Le PDF affiche le tableau comparatif au-dessus de l'analyse, avec ses sources.
+Saisie dans **Secteurs → Données → Comparatif régional**.
+
+Les valeurs ne sont volontairement pas pré-remplies : les inventer reviendrait
+à commettre l'erreur que ce dispositif corrige.
+
 ### Approche hybride
 
 `promptService.buildDataContext()` sérialise les données chiffrées du secteur
@@ -305,6 +333,27 @@ présenter comme des données publiées.
 Chaque appel est tracé dans `logs_generation` (prompt, réponse, durée, statut).
 Une section en échec n'interrompt pas la génération : le PDF affiche un encart
 explicite et le rapport reste livrable.
+
+### Résistance aux quotas
+
+Sept appels s'enchaînent en moins d'une minute et Groq répond `429` dès que sa
+limite par minute est atteinte — cas rencontré en conditions réelles, où les
+sept sections ont échoué d'un coup et le rapport **payé** est sorti sans aucune
+partie rédigée.
+
+Trois protections désormais :
+
+1. **Reprise automatique** — jusqu'à 4 tentatives par section, attente
+   croissante (2 s, 4 s, 8 s), en respectant l'en-tête `retry-after` de Groq.
+2. **Message visible** — pendant l'attente, la barre de progression affiche
+   « service de rédaction saturé, nouvelle tentative dans N s » au lieu de
+   sembler figée.
+3. **Relance sans repaiement** — un achat payé dont le rapport manque reste
+   listé dans **Mes rapports** avec un bouton *Relancer la génération*. Le
+   droit vient de l'achat vérifié en base, pas d'une affirmation du navigateur.
+
+En dernier recours, l'écran **Rapports** du panneau admin permet de saisir le
+texte à la main et de reconstruire le PDF.
 
 ---
 
@@ -386,6 +435,10 @@ dans l'ordre numérique.
   valeurs à jour. Utile notamment quand le quota de rédaction est épuisé : le
   rapport sort avec ses sections chiffrées, et le texte se saisit à la main.
 - **Comptes** — liste des comptes et gestion des rôles.
+
+Sécurité : `/api/auth/login` est plafonné à 10 tentatives par quart d'heure et
+par adresse IP, l'inscription à 5 par heure. bcrypt ralentit chaque
+vérification mais n'empêche pas d'en enchaîner des milliers — le plafond, si.
 
 Enregistrer des chiffres clés rafraîchit automatiquement la date de mise à jour
 affichée au catalogue.

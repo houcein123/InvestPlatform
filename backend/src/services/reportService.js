@@ -12,7 +12,12 @@
 //   persistance (table rapports + logs_generation)
 // ============================================================================
 
+const fs = require("fs");
+const path = require("path");
+
 const { pool } = require("../config/db");
+const { config } = require("../config/env");
+const { slugify } = require("../pdf/theme");
 const sectorRepository = require("./sectorRepository");
 const groqService = require("./groqService");
 const { prompts, buildDataContext, SECTION_KEYS } = require("./promptService");
@@ -42,20 +47,35 @@ async function logGeneration({ secteurId, rapportId = null, prompt, reponse, dur
 
 /**
  * Produit les 7 sections narratives.
- * @param {object} data       résultat de getSectorData()
- * @param {function} onProgress rappel (clé, index, total) pour le suivi
+ * @param {object} data résultat de getSectorData()
+ * @param {{onSection?: function, onAttente?: function}} rappels
+ *        onSection(clé, faites, total) — avancement section par section
+ *        onAttente(libellé)            — message passager (reprise après quota)
  */
-async function generateNarratives(data, onProgress) {
+async function generateNarratives(data, { onSection, onAttente } = {}) {
     const contexte = buildDataContext(data);
     const narratives = {};
 
     for (let i = 0; i < SECTION_KEYS.length; i++) {
         const key = SECTION_KEYS[i];
-        const prompt = prompts[key](data.secteur, contexte);
+        // Le 3e argument ne sert qu'au benchmarking ; les autres prompts
+        // l'ignorent, ce qui évite une branche conditionnelle ici.
+        const prompt = prompts[key](data.secteur, contexte, data.benchmarksRegionaux);
         const started = Date.now();
 
         try {
-            narratives[key] = await groqService.generateText(prompt);
+            narratives[key] = await groqService.generateText(prompt, {
+                // Une attente de plusieurs secondes doit se voir : sans cela la
+                // barre de progression semble bloquée et l'utilisateur ferme
+                // l'onglet en croyant à une panne.
+                onRetry: (tentative, attenteMs) => {
+                    if (onAttente) {
+                        onAttente(
+                            `Service de rédaction saturé — nouvelle tentative dans ${Math.round(attenteMs / 1000)} s`
+                        );
+                    }
+                },
+            });
             await logGeneration({
                 secteurId: data.secteur.id,
                 prompt,
@@ -78,7 +98,7 @@ async function generateNarratives(data, onProgress) {
             });
         }
 
-        if (onProgress) onProgress(key, i + 1, SECTION_KEYS.length);
+        if (onSection) onSection(key, i + 1, SECTION_KEYS.length);
         if (i < SECTION_KEYS.length - 1) await sleep(DELAY_BETWEEN_CALLS_MS);
     }
 
@@ -116,14 +136,18 @@ async function generateFullReport(sectorId, { achatId = null, utilisateurId = nu
 
     // 90 % de la barre couvre les appels IA (de loin l'étape la plus longue),
     // les 10 % restants l'assemblage du PDF.
-    const narratives = await generateNarratives(data, (key, done, total) => {
-        if (onProgress) {
-            const suivante = SECTION_KEYS[done];
-            onProgress(
-                Math.round((done / total) * 90),
-                suivante ? SECTION_LABELS[suivante] : "Assemblage du document"
-            );
-        }
+    let avancement = 0;
+    const narratives = await generateNarratives(data, {
+        onSection: (key, done, total) => {
+            avancement = Math.round((done / total) * 90);
+            if (onProgress) {
+                const suivante = SECTION_KEYS[done];
+                onProgress(avancement, suivante ? SECTION_LABELS[suivante] : "Assemblage du document");
+            }
+        },
+        // Le pourcentage ne bouge pas pendant une attente : seul le libellé
+        // change, ce qui montre que le service travaille toujours.
+        onAttente: (libelle) => onProgress && onProgress(avancement, libelle),
     });
     const sectionsManquantes = SECTION_KEYS.filter((k) => !narratives[k]);
 
@@ -172,14 +196,60 @@ async function persistRapport({ utilisateurId, achatId, secteur, pdf, narratives
 }
 
 /**
- * Aperçu gratuit — 2 pages, sans appel IA (le sommaire et la couverture ne
+ * Aperçu gratuit — 2 pages, sans appel au modèle (couverture et sommaire ne
  * dépendent que des données en base : l'aperçu reste donc instantané et
- * gratuit même si le quota Groq est épuisé).
+ * gratuit même si le quota de rédaction est épuisé).
+ *
+ * Le fichier est REUTILISÉ tant que le secteur n'a pas changé. L'aperçu est le
+ * point le plus cliqué du catalogue et son contenu ne dépend que de
+ * `secteurs.date_maj` : le régénérer à chaque visite ne faisait qu'écrire
+ * inutilement sur le disque à chaque passage d'un visiteur.
  */
 async function generatePreview(sectorId) {
+    const secteur = await sectorRepository.findSectorById(sectorId);
+    if (!secteur) return null;
+
+    const nomFichier = `apercu_${slugify(secteur.slug || secteur.nom)}.pdf`;
+    const chemin = path.join(config.reportsDir, nomFichier);
+
+    try {
+        const fichier = fs.statSync(chemin);
+        const majSecteur = secteur.date_maj ? new Date(secteur.date_maj).getTime() : 0;
+        if (fichier.mtimeMs > majSecteur) {
+            return { filename: nomFichier, path: chemin, url: `/reports/${nomFichier}` };
+        }
+    } catch {
+        // Absent ou illisible : on le produit ci-dessous.
+    }
+
     const data = await sectorRepository.getSectorData(sectorId);
     if (!data) return null;
     return generatePreviewPDF(data);
+}
+
+/**
+ * Un rapport payé dont la génération n'a pas abouti doit pouvoir être relancé
+ * SANS nouveau paiement : le serveur peut redémarrer en pleine génération, et
+ * le suivi de job ne survit pas à un redémarrage. Sans cette reprise, le client
+ * se retrouvait avec un achat payé et aucun moyen d'obtenir son document.
+ *
+ * @returns {Promise<{achat: object}|null>} l'achat éligible, ou null
+ */
+async function findAchatRegenerable(achatId, utilisateurId) {
+    const { rows } = await pool.query(
+        `SELECT a.*, (
+                SELECT COUNT(*)::int FROM rapports r
+                 WHERE r.secteur_id = a.id_secteur
+                   AND r.utilisateur_id IS NOT DISTINCT FROM a.id_utilisateur
+                   AND r.chemin_fichier IS NOT NULL
+            ) AS rapports_produits
+           FROM achats a
+          WHERE a.id = $1
+            AND a.statut_paiement = 'paye'
+            AND a.id_utilisateur IS NOT DISTINCT FROM $2`,
+        [achatId, utilisateurId]
+    );
+    return rows[0] || null;
 }
 
 /** Liste des rapports produits, pour l'écran d'édition du panneau admin. */
@@ -267,5 +337,6 @@ module.exports = {
     listReports,
     getReport,
     updateReportNarratives,
+    findAchatRegenerable,
     SECTION_KEYS,
 };

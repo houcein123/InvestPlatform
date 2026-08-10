@@ -731,6 +731,47 @@ function renderZonesSection(doc, zones) {
 }
 
 // ============================================================================
+// 5 bis. COMPARATIF RÉGIONAL (CDC §4)
+// ----------------------------------------------------------------------------
+// Les seuls chiffres étrangers que le rapport ait le droit d'afficher : ils
+// viennent de la table `benchmarks_regionaux`, saisie par l'administration.
+// Aucune valeur n'est produite par le modèle de langage.
+// ============================================================================
+
+function renderBenchmarkTable(doc, benchmarks) {
+    const renseignes = (benchmarks || []).filter(
+        (b) => b.valeur_tunisie !== null || b.valeur_maroc !== null || b.valeur_egypte !== null
+    );
+    if (renseignes.length === 0) return;
+
+    const startX = doc.page.margins.left;
+
+    drawSubHeading(doc, "Comparatif chiffré Tunisie – Maroc – Égypte");
+    drawTable(doc, {
+        rows: renseignes,
+        columns: [
+            { label: "Indicateur", width: 0.40, render: (r) => r.indicateur },
+            { label: "Unité", width: 0.16, render: (r) => r.unite || "-" },
+            { label: "Tunisie", width: 0.148, align: "right", bold: true,
+              render: (r) => (r.valeur_tunisie != null ? formatNumber(r.valeur_tunisie, 2) : "N/D") },
+            { label: "Maroc", width: 0.146, align: "right",
+              render: (r) => (r.valeur_maroc != null ? formatNumber(r.valeur_maroc, 2) : "N/D") },
+            { label: "Égypte", width: 0.146, align: "right",
+              render: (r) => (r.valeur_egypte != null ? formatNumber(r.valeur_egypte, 2) : "N/D") },
+        ],
+    });
+
+    const sources = Array.from(new Set(renseignes.map((b) => b.source).filter(Boolean)));
+    if (sources.length > 0) {
+        doc.font("Helvetica").fontSize(7.8).fillColor(COLORS.textLight)
+            .text(`Sources : ${sources.join(" · ")}`, startX, doc.y, { width: contentWidth(doc) });
+        doc.moveDown(0.5);
+        doc.x = startX;
+    }
+    doc.moveDown(0.2);
+}
+
+// ============================================================================
 // 6. SOURCES ET MÉTHODOLOGIE
 // ============================================================================
 
@@ -996,7 +1037,10 @@ const RENDERERS = {
     zones: (doc, r) => renderZonesSection(doc, r.zonesGeographiques),
     opportunites: (doc, r) => renderNarrativeSection(doc, r.narratives?.opportunites),
     risques: (doc, r) => renderNarrativeSection(doc, r.narratives?.risques),
-    benchmarking: (doc, r) => renderNarrativeSection(doc, r.narratives?.benchmarking),
+    benchmarking: (doc, r) => {
+        renderBenchmarkTable(doc, r.benchmarksRegionaux);
+        renderNarrativeSection(doc, r.narratives?.benchmarking);
+    },
     recommandations: (doc, r) => renderNarrativeSection(doc, r.narratives?.recommandations),
     perspectives: (doc, r) => renderNarrativeSection(doc, r.narratives?.perspectives),
     sources: (doc, r) => renderSourcesSection(doc, r),

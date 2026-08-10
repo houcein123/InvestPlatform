@@ -56,7 +56,7 @@ async function getSectorData(sectorId) {
     const secteur = await findSectorById(sectorId);
     if (!secteur) return null;
 
-    const [chiffres, stats, zones, acteurs, cadre] = await Promise.all([
+    const [chiffres, stats, zones, acteurs, cadre, benchmarks] = await Promise.all([
         pool.query("SELECT * FROM chiffres_cles WHERE secteur_id = $1", [sectorId]),
         pool.query(
             "SELECT * FROM donnees_statistiques WHERE secteur_id = $1 ORDER BY indicateur",
@@ -74,6 +74,10 @@ async function getSectorData(sectorId) {
             "SELECT * FROM cadre_reglementaire WHERE secteur_id = $1 AND est_en_vigueur = true ORDER BY annee DESC",
             [sectorId]
         ),
+        pool.query(
+            "SELECT * FROM benchmarks_regionaux WHERE secteur_id = $1 ORDER BY indicateur",
+            [sectorId]
+        ),
     ]);
 
     return {
@@ -83,7 +87,36 @@ async function getSectorData(sectorId) {
         zonesGeographiques: zones.rows,
         acteursPrincipaux: acteurs.rows,
         cadreReglementaire: cadre.rows,
+        benchmarksRegionaux: benchmarks.rows,
     };
+}
+
+// ── Comparatif régional (CDC §4) ───────────────────────────────────────────
+
+async function listBenchmarks(sectorId) {
+    const { rows } = await pool.query(
+        "SELECT * FROM benchmarks_regionaux WHERE secteur_id = $1 ORDER BY indicateur",
+        [sectorId]
+    );
+    return rows;
+}
+
+/** Champs modifiables d'une ligne de comparatif. */
+const BENCHMARK_FIELDS = ["annee", "valeur_tunisie", "valeur_maroc", "valeur_egypte", "source", "commentaire"];
+
+async function updateBenchmark(id, payload) {
+    const valeurs = BENCHMARK_FIELDS.map((champ) => {
+        const v = payload[champ];
+        return v === "" || v === undefined ? null : v;
+    });
+    const affectations = BENCHMARK_FIELDS.map((champ, i) => `${champ} = $${i + 2}`).join(", ");
+
+    const { rows } = await pool.query(
+        `UPDATE benchmarks_regionaux SET ${affectations}, updated_at = CURRENT_TIMESTAMP
+          WHERE id = $1 RETURNING *`,
+        [id, ...valeurs]
+    );
+    return rows[0] || null;
 }
 
 // ── Chiffres clés (panneau admin — CDC §7) ─────────────────────────────────
@@ -250,5 +283,8 @@ module.exports = {
     listCadre,
     createCadre,
     deleteSectorItem,
+    listBenchmarks,
+    updateBenchmark,
     CHIFFRES_FIELDS,
+    BENCHMARK_FIELDS,
 };

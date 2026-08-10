@@ -150,16 +150,38 @@ async function listRecentReports(limit = 10) {
     return rows;
 }
 
-/** Rapports d'un client — alimente son espace personnel (CDC §6, étape 4). */
-async function listUserReports(utilisateurId) {
+/**
+ * Espace client (CDC §6, étape 4).
+ *
+ * La liste part des ACHATS, pas des rapports : un achat payé dont la
+ * génération a échoué doit rester visible, sans quoi le client ne verrait
+ * nulle part ce qu'il a payé et n'aurait aucun moyen de relancer.
+ */
+async function listUserPurchases(utilisateurId) {
     const { rows } = await pool.query(
-        `SELECT r.id, r.titre, r.chemin_fichier, r.statut, r.date_generation,
-                s.nom AS secteur, s.slug, a.montant, a.date_achat
-           FROM rapports r
-           JOIN secteurs s ON s.id = r.secteur_id
-      LEFT JOIN achats a ON a.id_utilisateur = r.utilisateur_id AND a.id_secteur = r.secteur_id
-          WHERE r.utilisateur_id = $1
-       ORDER BY r.date_generation DESC NULLS LAST`,
+        `SELECT a.id            AS achat_id,
+                a.montant,
+                a.date_achat,
+                a.mode_paiement,
+                s.id            AS secteur_id,
+                s.nom           AS secteur,
+                r.id            AS rapport_id,
+                r.chemin_fichier,
+                r.date_generation
+           FROM achats a
+           JOIN secteurs s ON s.id = a.id_secteur
+      LEFT JOIN LATERAL (
+                SELECT id, chemin_fichier, date_generation
+                  FROM rapports
+                 WHERE secteur_id = a.id_secteur
+                   AND utilisateur_id IS NOT DISTINCT FROM a.id_utilisateur
+                   AND chemin_fichier IS NOT NULL
+              ORDER BY date_generation DESC
+                 LIMIT 1
+           ) r ON TRUE
+          WHERE a.id_utilisateur = $1
+            AND a.statut_paiement = 'paye'
+       ORDER BY a.date_achat DESC`,
         [utilisateurId]
     );
     return rows;
@@ -172,5 +194,5 @@ module.exports = {
     findAchat,
     getSalesStats,
     listRecentReports,
-    listUserReports,
+    listUserPurchases,
 };

@@ -50,6 +50,35 @@ function formatSeries(row) {
 }
 
 /**
+ * Bloc comparatif Tunisie / Maroc / Égypte destiné à la section benchmarking.
+ *
+ * Ne transmet que les lignes RÉELLEMENT renseignées. Quand aucune n'existe, le
+ * bloc dit explicitement au modèle qu'il ne dispose d'aucun chiffre — c'est
+ * cette phrase qui l'empêche d'en fabriquer.
+ */
+function buildBenchmarkContext(benchmarks) {
+    const renseignes = (benchmarks || []).filter(
+        (b) => b.valeur_tunisie !== null || b.valeur_maroc !== null || b.valeur_egypte !== null
+    );
+
+    if (renseignes.length === 0) {
+        return "COMPARATIF RÉGIONAL : aucune donnée chiffrée comparative n'est "
+            + "disponible en base pour le Maroc et l'Égypte.\n";
+    }
+
+    const lignes = renseignes.map((b) => {
+        const valeur = (v) => (v === null || v === undefined ? "non disponible" : v);
+        const unite = b.unite ? ` ${b.unite}` : "";
+        const annee = b.annee ? ` [${b.annee}]` : "";
+        const source = b.source ? ` (source : ${b.source})` : "";
+        return `- ${b.indicateur}${annee} — Tunisie : ${valeur(b.valeur_tunisie)}${unite} | `
+            + `Maroc : ${valeur(b.valeur_maroc)}${unite} | Égypte : ${valeur(b.valeur_egypte)}${unite}${source}`;
+    });
+
+    return `COMPARATIF RÉGIONAL (seules valeurs chiffrées autorisées) :\n${lignes.join("\n")}\n`;
+}
+
+/**
  * Résumé chiffré compact d'un secteur, injecté dans tous les prompts.
  * @param {object} data résultat de sectorRepository.getSectorData()
  */
@@ -143,11 +172,26 @@ TÂCHE — Analyse des risques sectoriels (environ 300 mots), organisée en
 quatre volets : risques économiques, politiques et réglementaires, financiers
 et de change, opérationnels et environnementaux.`,
 
-    benchmarking: (s, ctx) => `${header(s, ctx)}
+    /**
+     * Seule section qui parle de pays étrangers. Le contexte sectoriel ne
+     * contient que des chiffres tunisiens : sans le bloc comparatif ci-dessous,
+     * le modèle devait inventer toutes les valeurs marocaines et égyptiennes.
+     * La consigne est donc explicite sur ce qu'il faut faire quand la donnée
+     * manque — décrire sans chiffrer, plutôt que produire un chiffre plausible.
+     */
+    benchmarking: (s, ctx, comparatif) => `${header(s, ctx)}
+${buildBenchmarkContext(comparatif)}
 TÂCHE — Benchmarking régional. Compare la Tunisie UNIQUEMENT avec le Maroc et
 l'Égypte, en six points numérotés : 1. Position de la Tunisie, 2. Comparaison
 avec le Maroc, 3. Comparaison avec l'Égypte, 4. Avantages compétitifs tunisiens,
-5. Faiblesses, 6. Leviers d'amélioration. Ne cite aucun autre pays.`,
+5. Faiblesses, 6. Leviers d'amélioration. Ne cite aucun autre pays.
+
+RÈGLE ABSOLUE SUR LES CHIFFRES — n'avance AUCUNE valeur chiffrée concernant le
+Maroc ou l'Égypte qui ne figure pas dans le comparatif ci-dessus. Si une
+comparaison chiffrée n'est pas disponible, formule-la en termes qualitatifs
+(« un marché sensiblement plus vaste », « une position comparable ») et indique
+que le chiffre n'est pas disponible dans ce rapport. Un chiffre inventé
+décrédibiliserait l'ensemble du document.`,
 
     recommandations: (s, ctx) => `${header(s, ctx)}
 TÂCHE — 5 recommandations stratégiques concrètes et actionnables pour un
@@ -171,4 +215,4 @@ const SECTION_KEYS = [
     "perspectives",
 ];
 
-module.exports = { prompts, buildDataContext, SECTION_KEYS };
+module.exports = { prompts, buildDataContext, buildBenchmarkContext, SECTION_KEYS };

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, fileUrl } from '../../api/client';
+import ComparatifRegional from '../../components/ComparatifRegional';
 import ProgressBar from '../../components/ProgressBar';
 
 /**
@@ -292,6 +293,9 @@ export default function SecteurDonnees() {
           </div>
         </form>
       </div>
+
+      {/* ── Comparatif régional (CDC §4) ── */}
+      <ComparatifRegional secteurId={id} onErreur={setErreur} />
 
       {/* ── Séries statistiques (lecture seule) ── */}
       <div className="card">
