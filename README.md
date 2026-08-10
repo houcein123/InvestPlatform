@@ -466,18 +466,3 @@ affichée au catalogue.
 | **ONAGRI** | https://www.onagri.nat.tn | Agriculture |
 | **ANME** | https://www.anme.nat.tn | Énergies renouvelables |
 | **Banque Mondiale** | api.worldbank.org | Macro-économie |
-
----
-
-## 🐛 Erreurs courantes
-
-| Erreur | Cause | Solution |
-|--------|-------|----------|
-| `Variables d'environnement manquantes` | `.env` absent ou incomplet | Copier `backend/.env.example` |
-| `Connexion PostgreSQL impossible` | URL Neon invalide | Vérifier `DATABASE_URL` |
-| `GROQ_API_KEY absente` (avertissement) | Clé non configurée | Les sections rédigées restent vides ; le reste fonctionne |
-| `Paiement indisponible` | `PAIEMENT_MODE=paypal` sans identifiants | Renseigner les identifiants, ou revenir à `PAIEMENT_MODE=simulation` |
-| `Payer has not yet approved the Order` | Capture appelée avant approbation | Passer par le bouton PayPal, qui enchaîne les deux étapes |
-| `Accès réservé aux administrateurs` | Compte client sur une route admin | Faire promouvoir le compte depuis **Comptes** |
-| `Serveur injoignable` côté React | Backend arrêté | `cd backend && npm run dev` |
-| `Port 3001 already in use` | Instance déjà lancée | Fermer l'autre processus ou changer `PORT` |
