@@ -411,7 +411,7 @@ Recalcul depuis le panneau de contrôle (**Secteurs → Données → Recalculer 
 projections**) ou par l'API `POST /api/admin/projections`. À relancer après
 chaque mise à jour des séries.
 
----
+--
 
 ## 🛠️ Base de données
 
@@ -491,6 +491,7 @@ affichée au catalogue.
 | **ONAGRI** | https://www.onagri.nat.tn | Agriculture |
 | **ANME** | https://www.anme.nat.tn | Énergies renouvelables |
 | **Banque Mondiale** | api.worldbank.org | Macro-économie |
+<<<<<<< HEAD
 
 ---
 
@@ -508,3 +509,5 @@ affichée au catalogue.
 | `Accès réservé aux administrateurs` | Compte client sur une route admin | Faire promouvoir le compte depuis **Comptes** |
 | `Serveur injoignable` côté React | Backend arrêté | `cd backend && npm run dev` |
 | `Port 3001 already in use` | Instance déjà lancée | Fermer l'autre processus ou changer `PORT` |
+=======
+>>>>>>> 93ca205f42a2e1a6a1faa3783c230129d766bafc
