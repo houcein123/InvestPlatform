@@ -39,7 +39,8 @@ Copier `backend/.env.example` vers `backend/.env` et renseigner :
 |----------|------|
 | `DATABASE_URL` | Chaîne de connexion Neon (obligatoire) |
 | `JWT_SECRET` | Signature des jetons de session (obligatoire) |
-| `GROQ_API_KEY` | Clé Groq — sans elle, les sections rédigées restent vides |
+| `GROQ_API_KEY` | Clé Groq (**une seule par ligne**) — sans elle, les sections rédigées restent vides |
+| `GROQ_MODEL` | Modèle de rédaction. Vérifier sa disponibilité avec `npm run modeles` |
 | `PAIEMENT_MODE` | `simulation` (défaut) ou `paypal` |
 | `PORT`, `CORS_ORIGIN`, `DEVISE` | Réseau et affichage |
 
@@ -334,6 +335,30 @@ Chaque appel est tracé dans `logs_generation` (prompt, réponse, durée, statut
 Une section en échec n'interrompt pas la génération : le PDF affiche un encart
 explicite et le rapport reste livrable.
 
+### Choix du modèle
+
+**Groq retire régulièrement des modèles de son catalogue.** `llama-3.3-70b-versatile`,
+utilisé au départ, a disparu et provoquait en pleine génération :
+
+```
+404 The model `llama-3.3-70b-versatile` does not exist or you do not have access to it
+```
+
+Ce message est trompeur : il désigne le modèle, alors que la cause peut aussi
+être une clé refusée. Deux garde-fous :
+
+```bash
+npm run modeles   # modèles réellement accessibles à la clé configurée
+```
+
+et une vérification **au démarrage du serveur**, qui distingue explicitement les
+deux causes et liste les remplaçants possibles. Elle ne bloque jamais le
+lancement : catalogue, aperçu et espace client fonctionnent sans rédaction.
+
+> **Une seule clé par ligne dans `.env`.** dotenv coupe la valeur au premier
+> « # » : deux clés sur la même ligne aboutissent à utiliser silencieusement la
+> première, la seconde étant traitée comme un commentaire.
+
 ### Résistance aux quotas
 
 Sept appels s'enchaînent en moins d'une minute et Groq répond `429` dès que sa
@@ -476,6 +501,8 @@ affichée au catalogue.
 | `Variables d'environnement manquantes` | `.env` absent ou incomplet | Copier `backend/.env.example` |
 | `Connexion PostgreSQL impossible` | URL Neon invalide | Vérifier `DATABASE_URL` |
 | `GROQ_API_KEY absente` (avertissement) | Clé non configurée | Les sections rédigées restent vides ; le reste fonctionne |
+| `GROQ_API_KEY refusée par Groq (401)` | Clé invalide, ou **deux clés sur la même ligne** du `.env` | N'en garder qu'une ; régénérer sur console.groq.com/keys |
+| `model_not_found` / `does not exist` | Modèle retiré du catalogue Groq | `npm run modeles` puis mettre à jour `GROQ_MODEL` |
 | `Paiement indisponible` | `PAIEMENT_MODE=paypal` sans identifiants | Renseigner les identifiants, ou revenir à `PAIEMENT_MODE=simulation` |
 | `Payer has not yet approved the Order` | Capture appelée avant approbation | Passer par le bouton PayPal, qui enchaîne les deux étapes |
 | `Accès réservé aux administrateurs` | Compte client sur une route admin | Faire promouvoir le compte depuis **Comptes** |

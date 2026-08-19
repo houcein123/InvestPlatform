@@ -21,7 +21,11 @@ const config = {
     bcryptRounds: Number(process.env.BCRYPT_ROUNDS) || 10,
 
     groqApiKey: process.env.GROQ_API_KEY,
-    groqModel: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+    // Groq retire régulièrement ses modèles : `llama-3.3-70b-versatile`, utilisé
+    // au départ, a disparu du catalogue et renvoyait un 404 trompeur en pleine
+    // génération. La liste réellement accessible se vérifie au démarrage
+    // (voir groqService.verifierAcces) et via `npm run modeles`.
+    groqModel: process.env.GROQ_MODEL || "openai/gpt-oss-120b",
 
     // ── Paiement ──
     // 'simulation' : validation locale, aucun débit, aucune configuration

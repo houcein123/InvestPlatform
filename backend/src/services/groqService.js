@@ -96,8 +96,65 @@ async function generateText(prompt, { maxTokens = 1500, temperature = 0.5, onRet
     throw derniereErreur;
 }
 
+/**
+ * Vérifie au démarrage que la clé est acceptée ET que le modèle configuré
+ * existe encore.
+ *
+ * Sans ce contrôle, une clé invalide ou un modèle retiré ne se manifestaient
+ * qu'en pleine génération, sous la forme d'un « 404 model_not_found » qui
+ * pointe vers le modèle alors que la cause peut être la clé. Le diagnostic
+ * arrive désormais au lancement, avec la liste des modèles réellement
+ * accessibles.
+ *
+ * Ne bloque JAMAIS le démarrage : le catalogue, l'aperçu et l'espace client
+ * fonctionnent sans rédaction.
+ */
+async function verifierAcces() {
+    if (!client) return { ok: false, raison: "cle_absente" };
+
+    let reponse;
+    try {
+        reponse = await fetch("https://api.groq.com/openai/v1/models", {
+            headers: { Authorization: `Bearer ${config.groqApiKey}` },
+        });
+    } catch (err) {
+        console.warn(`⚠️  Service de rédaction injoignable (${err.message}) — vérification reportée.`);
+        return { ok: false, raison: "reseau" };
+    }
+
+    if (reponse.status === 401) {
+        console.error("❌ GROQ_API_KEY refusée par Groq (401).");
+        console.error("   Vérifiez qu'une SEULE clé figure sur la ligne GROQ_API_KEY du fichier .env :");
+        console.error("   dotenv coupe la valeur au premier « # », une seconde clé y serait ignorée.");
+        console.error("   Clé à régénérer sur https://console.groq.com/keys");
+        return { ok: false, raison: "cle_invalide" };
+    }
+
+    if (!reponse.ok) {
+        console.warn(`⚠️  Vérification du service de rédaction impossible (HTTP ${reponse.status}).`);
+        return { ok: false, raison: "indisponible" };
+    }
+
+    const data = await reponse.json().catch(() => ({}));
+    const disponibles = (data.data || []).filter((m) => m.active !== false).map((m) => m.id);
+
+    if (!disponibles.includes(config.groqModel)) {
+        console.error(`❌ Le modèle « ${config.groqModel} » n'est pas accessible avec cette clé.`);
+        console.error("   Groq retire régulièrement des modèles. Modèles de rédaction disponibles :");
+        disponibles
+            .filter((id) => /gpt-oss|qwen|llama-3|compound/i.test(id) && !/guard|whisper|orpheus/i.test(id))
+            .forEach((id) => console.error(`     - ${id}`));
+        console.error("   Renseignez GROQ_MODEL dans .env avec l'un d'eux.");
+        return { ok: false, raison: "modele_absent", disponibles };
+    }
+
+    console.log(`✅ Rédaction : ${config.groqModel}`);
+    return { ok: true, disponibles };
+}
+
 module.exports = {
     generateText,
+    verifierAcces,
     model: config.groqModel,
     isConfigured: !!client,
     MAX_TENTATIVES,

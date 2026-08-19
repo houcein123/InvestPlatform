@@ -10,6 +10,7 @@ const path = require("path");
 
 const { config, assertConfig } = require("./config/env");
 const { connectDatabase } = require("./config/db");
+const groqService = require("./services/groqService");
 const routes = require("./routes");
 const { notFoundHandler, errorHandler } = require("./middleware/errorHandler");
 
@@ -35,6 +36,11 @@ async function start() {
         console.error("❌ Connexion PostgreSQL impossible :", err.message);
         process.exit(1);
     }
+
+    // Contrôle non bloquant : une clé ou un modèle hors service doit se voir au
+    // lancement, pas au milieu d'une génération déjà payée. Le catalogue,
+    // l'aperçu et l'espace client fonctionnent sans rédaction.
+    await groqService.verifierAcces();
 
     app.listen(config.port, () => {
         console.log("========================================");
