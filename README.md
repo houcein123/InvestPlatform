@@ -494,20 +494,3 @@ affichée au catalogue.
 <<<<<<< HEAD
 
 ---
-
-## 🐛 Erreurs courantes
-
-| Erreur | Cause | Solution |
-|--------|-------|----------|
-| `Variables d'environnement manquantes` | `.env` absent ou incomplet | Copier `backend/.env.example` |
-| `Connexion PostgreSQL impossible` | URL Neon invalide | Vérifier `DATABASE_URL` |
-| `GROQ_API_KEY absente` (avertissement) | Clé non configurée | Les sections rédigées restent vides ; le reste fonctionne |
-| `GROQ_API_KEY refusée par Groq (401)` | Clé invalide, ou **deux clés sur la même ligne** du `.env` | N'en garder qu'une ; régénérer sur console.groq.com/keys |
-| `model_not_found` / `does not exist` | Modèle retiré du catalogue Groq | `npm run modeles` puis mettre à jour `GROQ_MODEL` |
-| `Paiement indisponible` | `PAIEMENT_MODE=paypal` sans identifiants | Renseigner les identifiants, ou revenir à `PAIEMENT_MODE=simulation` |
-| `Payer has not yet approved the Order` | Capture appelée avant approbation | Passer par le bouton PayPal, qui enchaîne les deux étapes |
-| `Accès réservé aux administrateurs` | Compte client sur une route admin | Faire promouvoir le compte depuis **Comptes** |
-| `Serveur injoignable` côté React | Backend arrêté | `cd backend && npm run dev` |
-| `Port 3001 already in use` | Instance déjà lancée | Fermer l'autre processus ou changer `PORT` |
-=======
->>>>>>> 93ca205f42a2e1a6a1faa3783c230129d766bafc
