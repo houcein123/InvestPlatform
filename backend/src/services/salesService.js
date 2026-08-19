@@ -83,43 +83,70 @@ async function findAchat(achatId) {
  * Le LEFT JOIN garantit que les 6 secteurs apparaissent, même sans vente.
  */
 async function getSalesStats() {
+    // ⚠️ NE JAMAIS agréger `achats` et `rapports` dans un même GROUP BY :
+    // les deux se rattachent au secteur, la jointure produit donc un produit
+    // cartésien et SUM(montant) compte chaque achat autant de fois qu'il
+    // existe de rapports pour ce secteur. `COUNT(DISTINCT)` y résiste, pas
+    // `SUM`. Le bug gonflait le chiffre d'affaires (664,85 au lieu de 324,93
+    // sur un jeu de 7 achats). Chaque table est donc agrégée séparément.
     const { rows } = await pool.query(`
         SELECT s.id,
                s.nom,
                s.slug,
                s.prix_rapport,
-               COUNT(DISTINCT a.id) FILTER (
-                   WHERE a.statut_paiement = 'paye' AND a.mode_paiement <> 'simulation'
-               )::int AS nb_ventes,
-               COALESCE(SUM(a.montant) FILTER (
-                   WHERE a.statut_paiement = 'paye' AND a.mode_paiement <> 'simulation'
-               ), 0)::float AS revenu,
-               COUNT(DISTINCT a.id) FILTER (
-                   WHERE a.statut_paiement = 'paye' AND a.mode_paiement = 'simulation'
-               )::int AS nb_ventes_simulees,
-               COALESCE(SUM(a.montant) FILTER (
-                   WHERE a.statut_paiement = 'paye' AND a.mode_paiement = 'simulation'
-               ), 0)::float AS revenu_simule,
-               COUNT(DISTINCT r.id)::int AS nb_rapports_generes
+               COALESCE(v.nb_ventes, 0)::int            AS nb_ventes,
+               COALESCE(v.revenu, 0)::float             AS revenu,
+               COALESCE(v.nb_ventes_simulees, 0)::int   AS nb_ventes_simulees,
+               COALESCE(v.revenu_simule, 0)::float      AS revenu_simule,
+               COALESCE(rp.nb_rapports, 0)::int         AS nb_rapports_generes
           FROM secteurs s
-          LEFT JOIN achats a   ON a.id_secteur = s.id
-          LEFT JOIN rapports r ON r.secteur_id = s.id
-         GROUP BY s.id, s.nom, s.slug, s.prix_rapport
+          LEFT JOIN (
+                SELECT id_secteur,
+                       COUNT(*)      FILTER (WHERE mode_paiement <> 'simulation') AS nb_ventes,
+                       SUM(montant)  FILTER (WHERE mode_paiement <> 'simulation') AS revenu,
+                       COUNT(*)      FILTER (WHERE mode_paiement = 'simulation')  AS nb_ventes_simulees,
+                       SUM(montant)  FILTER (WHERE mode_paiement = 'simulation')  AS revenu_simule
+                  FROM achats
+                 WHERE statut_paiement = 'paye'
+              GROUP BY id_secteur
+          ) v ON v.id_secteur = s.id
+          LEFT JOIN (
+                SELECT secteur_id, COUNT(*) AS nb_rapports
+                  FROM rapports
+              GROUP BY secteur_id
+          ) rp ON rp.secteur_id = s.id
          ORDER BY s.id
     `);
 
-    const totaux = rows.reduce(
+    // Le tableau de bord affiche le TOTAL des ventes : en mode démonstration,
+    // n'afficher que le chiffre d'affaires réel laissait la page à zéro en
+    // permanence et la rendait inutilisable. La part simulée reste distinguée
+    // pour que le chiffre réel demeure lisible.
+    const parSecteur = rows.map((r) => ({
+        ...r,
+        nb_ventes_total: r.nb_ventes + r.nb_ventes_simulees,
+        revenu_total: Math.round((r.revenu + r.revenu_simule) * 100) / 100,
+    }));
+
+    const totaux = parSecteur.reduce(
         (acc, r) => ({
             nb_ventes: acc.nb_ventes + r.nb_ventes,
-            revenu: acc.revenu + r.revenu,
+            revenu: Math.round((acc.revenu + r.revenu) * 100) / 100,
             nb_ventes_simulees: acc.nb_ventes_simulees + r.nb_ventes_simulees,
-            revenu_simule: acc.revenu_simule + r.revenu_simule,
+            revenu_simule: Math.round((acc.revenu_simule + r.revenu_simule) * 100) / 100,
+            nb_ventes_total: acc.nb_ventes_total + r.nb_ventes_total,
+            revenu_total: Math.round((acc.revenu_total + r.revenu_total) * 100) / 100,
             nb_rapports_generes: acc.nb_rapports_generes + r.nb_rapports_generes,
         }),
-        { nb_ventes: 0, revenu: 0, nb_ventes_simulees: 0, revenu_simule: 0, nb_rapports_generes: 0 }
+        {
+            nb_ventes: 0, revenu: 0,
+            nb_ventes_simulees: 0, revenu_simule: 0,
+            nb_ventes_total: 0, revenu_total: 0,
+            nb_rapports_generes: 0,
+        }
     );
 
-    return { devise: config.devise, mode: config.paiementMode, parSecteur: rows, totaux };
+    return { devise: config.devise, mode: config.paiementMode, parSecteur, totaux };
 }
 
 /** Derniers rapports générés, tous clients confondus (panneau admin). */
