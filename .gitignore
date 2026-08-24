@@ -20,3 +20,6 @@ npm-debug.log*
 # ── OS / éditeurs ──
 .DS_Store
 Thumbs.db
+
+# Ancienne version Node/JSX, conservee le temps de la migration
+_archive-ancienne-version/

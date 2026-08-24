@@ -1,0 +1,109 @@
+/* ==========================================================================
+   Tunisia Invest — jetons de design.
+   --------------------------------------------------------------------------
+   Une seule definition de couleur par role, en HSL, declinee clair/sombre.
+   Les composants ne referencent jamais une couleur brute : ils passent par un
+   role (surface, muted, primary, danger). Changer la charte se fait donc ici,
+   et nulle part ailleurs.
+   ========================================================================== */
+
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Sora", "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  /* Rayons : une echelle courte, pour que rien ne depareille. */
+  --radius-card: 1rem;
+  --radius-control: 0.625rem;
+
+  /* Ombres portees discretes : sur fond sombre, une ombre trop marquee
+     salit l'interface au lieu de creuser la profondeur. */
+  --shadow-elevated: 0 1px 2px rgb(0 0 0 / 0.24), 0 12px 32px -12px rgb(0 0 0 / 0.45);
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.06), 0 8px 24px -16px rgb(15 23 42 / 0.24);
+}
+
+:root {
+  color-scheme: light;
+
+  --background: 210 40% 98%;
+  --foreground: 222 47% 11%;
+
+  --surface: 0 0% 100%;
+  --surface-muted: 210 40% 96%;
+  --surface-raised: 0 0% 100%;
+
+  --border: 214 32% 91%;
+  --input: 214 32% 91%;
+  --ring: 168 72% 32%;
+
+  --muted: 215 16% 47%;
+
+  /* Emeraude profonde : la couleur d'action et de croissance. */
+  --primary: 168 72% 28%;
+  --primary-foreground: 0 0% 100%;
+  --primary-soft: 168 60% 94%;
+
+  /* Or : reserve aux mises en avant premium et aux montants. */
+  --accent: 41 72% 47%;
+  --accent-foreground: 26 60% 14%;
+  --accent-soft: 41 90% 95%;
+
+  --danger: 0 72% 45%;
+  --danger-foreground: 0 0% 100%;
+  --danger-soft: 0 86% 96%;
+
+  --warning: 32 90% 44%;
+  --success: 152 60% 34%;
+
+  /* Palette des graphiques : six teintes distinctes pour six secteurs,
+     lisibles cote a cote et differenciees autrement que par la seule
+     luminosite (une contrainte de daltonisme, pas une preference). */
+  --chart-1: 168 72% 34%;
+  --chart-2: 217 79% 52%;
+  --chart-3: 41 82% 50%;
+  --chart-4: 291 55% 52%;
+  --chart-5: 12 78% 54%;
+  --chart-6: 187 70% 38%;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --background: 222 47% 7%;
+  --foreground: 210 40% 96%;
+
+  --surface: 222 40% 11%;
+  --surface-muted: 222 34% 15%;
+  --surface-raised: 222 38% 13%;
+
+  --border: 217 25% 21%;
+  --input: 217 25% 21%;
+  --ring: 168 66% 45%;
+
+  --muted: 215 20% 62%;
+
+  --primary: 168 66% 42%;
+  --primary-foreground: 222 47% 8%;
+  --primary-soft: 168 50% 16%;
+
+  --accent: 41 84% 58%;
+  --accent-foreground: 26 60% 10%;
+  --accent-soft: 41 60% 16%;
+
+  --danger: 0 72% 58%;
+  --danger-foreground: 0 0% 100%;
+  --danger-soft: 0 50% 18%;
+
+  --warning: 32 90% 58%;
+  --success: 152 55% 48%;
+
+  --chart-1: 168 66% 48%;
+  --chart-2: 217 85% 66%;
+  --chart-3: 41 88% 60%;
+  --chart-4: 291 65% 68%;
+  --chart-5: 12 84% 64%;
+  --chart-6: 187 72% 52%;
+}
