@@ -1,22 +1,27 @@
-# ── Dépendances ──
+# Dépendances
 node_modules/
+.venv/
 venv/
-__pycache__/
-*.pyc
 
-# ── Secrets ──
+# Secrets — jamais versionnés. Les modèles sont dans *.env.example.
 .env
-.env.*
-!.env.example
 .env.local
 *.env.local
 
-# ── Artefacts générés ──
-backend/reports/*.pdf
-frontend/dist/
+# Artefacts de build
+dist/
+target/
+build/
+*.jar
+
+# Rapports PDF produits à l'exécution
+report-engine/reports/
+uploads/
+
+# Outillage
+.vscode/
+.idea/
 *.log
 npm-debug.log*
-
-# ── OS / éditeurs ──
 .DS_Store
 Thumbs.db

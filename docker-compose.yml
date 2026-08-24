@@ -1,0 +1,73 @@
+# ============================================================================
+# Tunisia Invest — pile locale complete.
+# ----------------------------------------------------------------------------
+# Trois services et une base. Les identifiants viennent d'un fichier .env place
+# a cote de ce compose : aucun secret n'est ecrit ici.
+#
+# ⚠️  `report-engine` n'expose PAS de port vers l'hote. Il fabrique des rapports
+#     sans verifier de droit d'acces — cette verification appartient au backend.
+#     Le rendre joignable depuis l'exterieur reviendrait a offrir la generation
+#     de rapports payants a qui connait l'URL.
+# ============================================================================
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tunisia_invest}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?definir POSTGRES_PASSWORD dans .env}
+    volumes:
+      - donnees-postgres:/var/lib/postgresql/data
+      # Le schema est joue une seule fois, a la creation du volume.
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+
+  report-engine:
+    build:
+      context: ./report-engine
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-tunisia_invest}
+      REPORT_ENGINE_TOKEN: ${REPORT_ENGINE_TOKEN:?definir REPORT_ENGINE_TOKEN dans .env}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-120b}
+      PORT: "3001"
+    volumes:
+      # Les PDF produits survivent au redemarrage du conteneur.
+      - rapports:/app/reports
+    depends_on:
+      db:
+        condition: service_healthy
+    # Aucun `ports:` — joignable uniquement depuis le reseau interne.
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-tunisia_invest}
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?definir JWT_SECRET (32 caracteres minimum)}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      PAIEMENT_MODE: ${PAIEMENT_MODE:-simulation}
+      PAYPAL_ENV: ${PAYPAL_ENV:-sandbox}
+      PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID:-}
+      PAYPAL_CLIENT_SECRET: ${PAYPAL_CLIENT_SECRET:-}
+      PAYPAL_WEBHOOK_ID: ${PAYPAL_WEBHOOK_ID:-}
+      REPORT_ENGINE_URL: http://report-engine:3001
+      REPORT_ENGINE_TOKEN: ${REPORT_ENGINE_TOKEN}
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  donnees-postgres:
+  rapports:
