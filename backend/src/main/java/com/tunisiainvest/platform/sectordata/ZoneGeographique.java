@@ -51,4 +51,21 @@ public class ZoneGeographique {
     @JsonProperty("created_at")
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
+
+
+    /*
+     * Libellés anglais (migration 011).
+     *
+     * Servis à côté du français dans la même réponse, comme pour les secteurs :
+     * négocier la langue côté serveur invaliderait le cache du frontend à
+     * chaque bascule. NULL est normal — l'interface retombe alors sur le
+     * français plutôt que d'afficher un vide.
+     */
+    @JsonProperty("description_en")
+    @Column(name = "description_en")
+    private String descriptionEn;
+
+    @JsonProperty("avantages_en")
+    @Column(name = "avantages_en")
+    private String avantagesEn;
 }

@@ -20,6 +20,8 @@ const { config } = require("../config/env");
 const { slugify } = require("../pdf/theme");
 const sectorRepository = require("./sectorRepository");
 const groqService = require("./groqService");
+const { LANGUE_DEFAUT, normaliserLangue } = require("../pdf/libelles");
+const qualiteService = require("./qualiteService");
 const { prompts, buildDataContext, SECTION_KEYS } = require("./promptService");
 const { generateReportPDF, generatePreviewPDF } = require("../pdf/reportPdf");
 
@@ -52,15 +54,16 @@ async function logGeneration({ secteurId, rapportId = null, prompt, reponse, dur
  *        onSection(clé, faites, total) — avancement section par section
  *        onAttente(libellé)            — message passager (reprise après quota)
  */
-async function generateNarratives(data, { onSection, onAttente } = {}) {
+async function generateNarratives(data, { onSection, onAttente, langue = LANGUE_DEFAUT } = {}) {
     const contexte = buildDataContext(data);
     const narratives = {};
+    const relectures = [];
 
     for (let i = 0; i < SECTION_KEYS.length; i++) {
         const key = SECTION_KEYS[i];
         // Le 3e argument ne sert qu'au benchmarking ; les autres prompts
         // l'ignorent, ce qui évite une branche conditionnelle ici.
-        const prompt = prompts[key](data.secteur, contexte, data.benchmarksRegionaux);
+        const prompt = prompts[key](data.secteur, contexte, data.benchmarksRegionaux, langue);
 
         // Espacement preventif : si la section precedente a atteint la limite
         // par minute, repartir aussitot la redepasserait et gaspillerait une
@@ -93,6 +96,20 @@ async function generateNarratives(data, { onSection, onAttente } = {}) {
                 dureeMs: Date.now() - started,
                 statut: "succes",
             });
+
+            // Relecture par le second modèle, immédiatement après la rédaction :
+            // le contexte chiffré est déjà en main et la section est fraîche.
+            // L'appel est silencieux pour l'utilisateur — il ne rallonge pas la
+            // barre de progression d'une étape qu'il ne comprendrait pas — et
+            // ne peut pas faire échouer la génération.
+            const relecture = await qualiteService.relireSection(key, contexte, narratives[key]);
+            relectures.push(relecture);
+            if (relecture.statut === "suspect") {
+                console.warn(
+                    `🔍 Section « ${key} » : ${relecture.chiffres.length} chiffre(s) sans source — `
+                    + (relecture.remarque || "à relire avant diffusion")
+                );
+            }
         } catch (err) {
             // Une section manquante laisse le rapport exploitable : le PDF
             // affiche un encart explicite plutôt que d'échouer entièrement.
@@ -112,7 +129,7 @@ async function generateNarratives(data, { onSection, onAttente } = {}) {
         if (i < SECTION_KEYS.length - 1) await sleep(DELAY_BETWEEN_CALLS_MS);
     }
 
-    return narratives;
+    return { narratives, relectures };
 }
 
 /** Libellés d'étape affichés dans la barre de progression du frontend. */
@@ -133,9 +150,15 @@ const SECTION_LABELS = {
  *        onProgress(progression 0-100, libellé d'étape)
  * @returns {Promise<{pdf: object, rapportId: number|null, sectionsManquantes: string[]}>}
  */
-async function generateFullReport(sectorId, { achatId = null, utilisateurId = null, onProgress = null } = {}) {
+async function generateFullReport(sectorId, {
+    achatId = null, utilisateurId = null, onProgress = null, langue = LANGUE_DEFAUT,
+} = {}) {
     const data = await sectorRepository.getSectorData(sectorId);
     if (!data) return null;
+
+    // Une langue inconnue retombe sur le francais plutot que de faire
+    // echouer une generation deja payee.
+    const langueRapport = normaliserLangue(langue);
 
     console.log(`📊 Génération du rapport « ${data.secteur.nom} »…`);
     console.log(
@@ -147,7 +170,8 @@ async function generateFullReport(sectorId, { achatId = null, utilisateurId = nu
     // 90 % de la barre couvre les appels IA (de loin l'étape la plus longue),
     // les 10 % restants l'assemblage du PDF.
     let avancement = 0;
-    const narratives = await generateNarratives(data, {
+    const { narratives, relectures } = await generateNarratives(data, {
+        langue: langueRapport,
         onSection: (key, done, total) => {
             avancement = Math.round((done / total) * 90);
             if (onProgress) {
@@ -161,8 +185,21 @@ async function generateFullReport(sectorId, { achatId = null, utilisateurId = nu
     });
     const sectionsManquantes = SECTION_KEYS.filter((k) => !narratives[k]);
 
+    // Le contrôle qualité est un SIGNALEMENT, pas un verrou : le rapport est
+    // payé, il part. Les sections douteuses remontent au journal et à l'écran
+    // d'édition, où un humain tranche.
+    const controleQualite = qualiteService.synthese(relectures);
+    if (controleQualite && controleQualite.suspectes.length > 0) {
+        console.warn(
+            `🔍 Contrôle qualité (${controleQualite.modele}) : `
+            + `${controleQualite.suspectes.length} section(s) à relire sur ${controleQualite.verifiees}.`
+        );
+    }
+
     if (onProgress) onProgress(92, "Assemblage du document PDF");
-    const pdf = await generateReportPDF({ ...data, narratives, modeleIA: groqService.model });
+    const pdf = await generateReportPDF({
+        ...data, narratives, modeleIA: groqService.model, langue: langueRapport,
+    });
     console.log(`✅ PDF généré : ${pdf.filename}`);
 
     const rapportId = await persistRapport({
@@ -173,7 +210,7 @@ async function generateFullReport(sectorId, { achatId = null, utilisateurId = nu
         narratives,
     });
 
-    return { pdf, rapportId, sectionsManquantes };
+    return { pdf, rapportId, sectionsManquantes, controleQualite };
 }
 
 /** Taille du PDF produit, ou null s'il n'est pas mesurable. */
@@ -259,11 +296,17 @@ async function persistRapport({ utilisateurId, achatId, secteur, pdf, narratives
  * `secteurs.date_maj` : le régénérer à chaque visite ne faisait qu'écrire
  * inutilement sur le disque à chaque passage d'un visiteur.
  */
-async function generatePreview(sectorId) {
+async function generatePreview(sectorId, langue = LANGUE_DEFAUT) {
     const secteur = await sectorRepository.findSectorById(sectorId);
     if (!secteur) return null;
 
-    const nomFichier = `apercu_${slugify(secteur.slug || secteur.nom)}.pdf`;
+    const langueApercu = normaliserLangue(langue);
+
+    // La LANGUE fait partie du nom de fichier, et c'est indispensable : les
+    // apercus sont mis en cache sur disque, et un nom commun aux deux langues
+    // ferait servir la version anglaise a un visiteur francophone — ou
+    // l'inverse — selon qui a demande l'apercu en premier.
+    const nomFichier = `apercu_${slugify(secteur.slug || secteur.nom)}_${langueApercu}.pdf`;
     const chemin = path.join(config.reportsDir, nomFichier);
 
     try {
@@ -278,7 +321,7 @@ async function generatePreview(sectorId) {
 
     const data = await sectorRepository.getSectorData(sectorId);
     if (!data) return null;
-    return generatePreviewPDF(data);
+    return generatePreviewPDF({ ...data, langue: langueApercu });
 }
 
 /**

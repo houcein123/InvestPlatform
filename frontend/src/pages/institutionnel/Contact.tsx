@@ -4,31 +4,36 @@ import {
 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useTraduction } from '@/i18n';
+import type { Dictionnaire } from '@/i18n/fr';
 import { ENTREPRISE, adressePostale, estRenseigne } from '@/lib/entreprise';
 
-const CANAUX = [
-  {
-    Icone: HeadsetIcon,
-    titre: 'Support client',
-    texte: "Commande, téléchargement d'un rapport, question sur votre compte.",
-    email: ENTREPRISE.contact.emailSupport,
-    delai: 'Réponse sous 1 jour ouvré',
-  },
-  {
-    Icone: Building2,
-    titre: 'Demandes commerciales',
-    texte: 'Rapports sur mesure, accès multi-utilisateurs, partenariats.',
-    email: ENTREPRISE.contact.emailCommercial,
-    delai: 'Réponse sous 2 jours ouvrés',
-  },
-  {
-    Icone: MessageSquare,
-    titre: 'Question générale',
-    texte: "Méthode, sources, couverture sectorielle, presse.",
-    email: ENTREPRISE.contact.emailGeneral,
-    delai: 'Réponse sous 3 jours ouvrés',
-  },
-];
+/** Les trois canaux de contact, dans la langue active. */
+function canaux(t: Dictionnaire) {
+  return [
+    {
+      Icone: HeadsetIcon,
+      titre: t.contact.supportTitre,
+      texte: t.contact.supportTexte,
+      email: ENTREPRISE.contact.emailSupport,
+      delai: t.contact.supportDelai,
+    },
+    {
+      Icone: Building2,
+      titre: t.contact.commercialTitre,
+      texte: t.contact.commercialTexte,
+      email: ENTREPRISE.contact.emailCommercial,
+      delai: t.contact.commercialDelai,
+    },
+    {
+      Icone: MessageSquare,
+      titre: t.contact.generalTitre,
+      texte: t.contact.generalTexte,
+      email: ENTREPRISE.contact.emailGeneral,
+      delai: t.contact.generalDelai,
+    },
+  ];
+}
 
 /**
  * Page de contact.
@@ -39,17 +44,18 @@ const CANAUX = [
  * sont des liens `mailto:` qui ouvrent réellement sa messagerie.
  */
 export default function Contact() {
+  const { t } = useTraduction();
   const adresse = adressePostale();
   const { contact } = ENTREPRISE;
-  const aucunCanal = CANAUX.every((canal) => !estRenseigne(canal.email));
+  const listeCanaux = canaux(t);
+  const aucunCanal = listeCanaux.every((canal) => !estRenseigne(canal.email));
 
   return (
     <div className="mx-auto max-w-4xl space-y-8">
       <motion.header initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="font-display text-3xl font-extrabold leading-tight">Nous contacter</h1>
+        <h1 className="font-display text-3xl font-extrabold leading-tight">{t.contact.titre}</h1>
         <p className="mt-3 max-w-2xl text-base leading-relaxed text-[hsl(var(--muted))]">
-          Choisissez le canal correspondant à votre demande : elle sera traitée par
-          l&apos;interlocuteur compétent, sans transfert intermédiaire.
+          {t.contact.accroche}
         </p>
       </motion.header>
 
@@ -60,21 +66,20 @@ export default function Contact() {
         >
           <ShieldAlert className="mt-0.5 size-5 shrink-0 text-[hsl(var(--warning))]" />
           <div className="text-sm leading-relaxed">
-            <p className="font-semibold">Coordonnées non renseignées</p>
+            <p className="font-semibold">{t.contact.aucunCanalTitre}</p>
             <p className="mt-1 text-[hsl(var(--muted))]">
-              Les adresses de contact sont vides dans{' '}
+              {t.contact.aucunCanalAvant}{' '}
               <code className="rounded bg-[hsl(var(--surface-muted))] px-1.5 py-0.5 text-xs">
                 src/lib/entreprise.ts
               </code>
-              . Elles n&apos;ont volontairement pas été inventées : une adresse fictive
-              renverrait les demandes dans le vide. Renseignez-les avant la mise en ligne.
+              {t.contact.aucunCanalApres}
             </p>
           </div>
         </div>
       )}
 
       <div className="grid gap-4 md:grid-cols-3">
-        {CANAUX.map(({ Icone, titre, texte, email, delai }, index) => (
+        {listeCanaux.map(({ Icone, titre, texte, email, delai }, index) => (
           <motion.article
             key={titre}
             initial={{ opacity: 0, y: 12 }}
@@ -96,7 +101,7 @@ export default function Contact() {
                 <Mail className="size-4" /> {email}
               </a>
             ) : (
-              <p className="mt-4 text-sm text-[hsl(var(--muted))]">— à renseigner —</p>
+              <p className="mt-4 text-sm text-[hsl(var(--muted))]">{t.contact.aRenseigner}</p>
             )}
 
             <p className="mt-2 flex items-center gap-1.5 text-xs text-[hsl(var(--muted))]">
@@ -108,13 +113,13 @@ export default function Contact() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Coordonnées</CardTitle>
+          <CardTitle>{t.contact.coordonnees}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-6 sm:grid-cols-2">
           <div className="space-y-3 text-sm">
             <p className="flex items-start gap-2.5">
               <MapPin className="mt-0.5 size-4 shrink-0 text-[hsl(var(--muted))]" />
-              <span>{adresse ?? <span className="text-[hsl(var(--muted))]">Adresse à renseigner</span>}</span>
+              <span>{adresse ?? <span className="text-[hsl(var(--muted))]">{t.contact.adresseARenseigner}</span>}</span>
             </p>
             <p className="flex items-center gap-2.5">
               <Phone className="size-4 shrink-0 text-[hsl(var(--muted))]" />
@@ -123,7 +128,7 @@ export default function Contact() {
                   {contact.telephone}
                 </a>
               ) : (
-                <span className="text-[hsl(var(--muted))]">Téléphone à renseigner</span>
+                <span className="text-[hsl(var(--muted))]">{t.contact.telephoneARenseigner}</span>
               )}
             </p>
             <p className="flex items-center gap-2.5">
@@ -133,20 +138,11 @@ export default function Contact() {
           </div>
 
           <div className="rounded-[var(--radius-control)] border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] p-4">
-            <p className="text-sm font-semibold">Avant d&apos;écrire</p>
+            <p className="text-sm font-semibold">{t.contact.avantEcrireTitre}</p>
             <ul className="mt-2 space-y-1.5 text-xs leading-relaxed text-[hsl(var(--muted))]">
-              <li>
-                Un rapport payé mais non livré se relance seul depuis
-                « Mes rapports », sans nouveau paiement.
-              </li>
-              <li>
-                Les deux premières pages de chaque rapport sont consultables
-                gratuitement depuis le catalogue.
-              </li>
-              <li>
-                Pour une question sur une commande, indiquez la référence de
-                transaction : elle figure sur l&apos;écran de confirmation.
-              </li>
+              <li>{t.contact.avantEcrire1}</li>
+              <li>{t.contact.avantEcrire2}</li>
+              <li>{t.contact.avantEcrire3}</li>
             </ul>
           </div>
         </CardContent>

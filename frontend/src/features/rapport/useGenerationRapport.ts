@@ -25,8 +25,8 @@ export function useGenerationRapport() {
   const demarreLe = useRef<number | null>(null);
 
   const lancer = useMutation({
-    mutationFn: ({ sectorId, achatId }: { sectorId: number; achatId: number }) =>
-      api.generateReport(sectorId, achatId),
+    mutationFn: ({ sectorId, achatId, langue }: { sectorId: number; achatId: number; langue: string }) =>
+      api.generateReport(sectorId, achatId, langue),
     onSuccess: (reponse) => {
       demarreLe.current = Date.now();
       setSecondes(0);

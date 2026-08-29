@@ -13,6 +13,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ErreurChamp, Input, Label } from '@/components/ui/input';
 import { StatCard } from '@/components/ui/stat-card';
+import { useTraduction } from '@/i18n';
+import type { Dictionnaire } from '@/i18n/fr';
 import { api } from '@/lib/api';
 import { cles } from '@/lib/queryClient';
 import { formatDate, formatMontant, formatNombre, initiales } from '@/lib/utils';
@@ -24,7 +26,7 @@ import { formatDate, formatMontant, formatNombre, initiales } from '@/lib/utils'
  * minimum de 8 caractères, cet indicateur aide à faire mieux sans transformer
  * la saisie en jeu de devinettes sur des règles invisibles.
  */
-function evaluerMotDePasse(valeur: string) {
+function evaluerMotDePasse(valeur: string, t: Dictionnaire) {
   if (!valeur) return null;
 
   const criteres = [
@@ -35,13 +37,14 @@ function evaluerMotDePasse(valeur: string) {
   ];
   const score = criteres.filter(Boolean).length + (valeur.length >= 8 ? 1 : 0);
 
-  if (score <= 2) return { libelle: 'Faible', part: 33, teinte: 'bg-[hsl(var(--danger))]' };
-  if (score <= 3) return { libelle: 'Correct', part: 66, teinte: 'bg-[hsl(var(--warning))]' };
-  return { libelle: 'Solide', part: 100, teinte: 'bg-[hsl(var(--success))]' };
+  if (score <= 2) return { libelle: t.profil.forceFaible, part: 33, teinte: 'bg-[hsl(var(--danger))]' };
+  if (score <= 3) return { libelle: t.profil.forceCorrecte, part: 66, teinte: 'bg-[hsl(var(--warning))]' };
+  return { libelle: t.profil.forceSolide, part: 100, teinte: 'bg-[hsl(var(--success))]' };
 }
 
 export default function Profil() {
   const { compte, rafraichir } = useAuth();
+  const { t } = useTraduction();
 
   const [identite, setIdentite] = useState({
     nom: compte?.nom ?? '',
@@ -67,9 +70,9 @@ export default function Profil() {
     mutationFn: () => api.updateProfil(identite),
     onSuccess: ({ compte: maj }) => {
       rafraichir(maj);
-      toast.success('Profil mis à jour');
+      toast.success(t.profil.profilMisAJour);
     },
-    onError: (erreur: Error) => toast.error('Enregistrement impossible', { description: erreur.message }),
+    onError: (erreur: Error) => toast.error(t.profil.enregistrementImpossible, { description: erreur.message }),
   });
 
   const changerMotDePasse = useMutation({
@@ -78,7 +81,7 @@ export default function Profil() {
       nouveau_mot_de_passe: motsDePasse.nouveau,
     }),
     onSuccess: () => {
-      toast.success('Mot de passe mis à jour');
+      toast.success(t.profil.motDePasseMisAJour);
       setMotsDePasse({ actuel: '', nouveau: '', confirmation: '' });
       setErreurMdp('');
     },
@@ -90,18 +93,18 @@ export default function Profil() {
     // La confirmation est vérifiée ici : envoyer au serveur un mot de passe
     // que l'utilisateur a mal ressaisi lui ferait perdre l'accès à son compte.
     if (motsDePasse.nouveau !== motsDePasse.confirmation) {
-      setErreurMdp('Les deux saisies ne correspondent pas.');
+      setErreurMdp(t.profil.saisiesDifferentes);
       return;
     }
     if (motsDePasse.nouveau.length < 8) {
-      setErreurMdp('Le mot de passe doit contenir au moins 8 caractères.');
+      setErreurMdp(t.profil.motDePasseTropCourt);
       return;
     }
     setErreurMdp('');
     changerMotDePasse.mutate();
   }
 
-  const force = evaluerMotDePasse(motsDePasse.nouveau);
+  const force = evaluerMotDePasse(motsDePasse.nouveau, t);
   const estAdmin = compte?.role === 'admin';
 
   return (
@@ -133,28 +136,28 @@ export default function Profil() {
         <div className="flex flex-wrap gap-2">
           <Badge variant={estAdmin ? 'accent' : 'primaire'}>
             {estAdmin ? <ShieldCheck /> : <User />}
-            {estAdmin ? 'Administrateur' : 'Client'}
+            {estAdmin ? t.role.administrateur : t.role.client}
           </Badge>
-          {compte?.est_verifie && <Badge variant="succes"><BadgeCheck /> Vérifié</Badge>}
+          {compte?.est_verifie && <Badge variant="succes"><BadgeCheck /> {t.profil.verifie}</Badge>}
         </div>
       </motion.header>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard index={0} libelle="Rapports commandés" valeur={formatNombre(lignes.length)}
-          Icone={FileText} detail={`${formatNombre(rapportsLivres)} livré(s)`} />
-        <StatCard index={1} libelle="Total réglé" valeur={formatMontant(totalDepense)}
+        <StatCard index={0} libelle={t.profil.rapportsCommandes} valeur={formatNombre(lignes.length)}
+          Icone={FileText} detail={t.profil.livres(formatNombre(rapportsLivres))} />
+        <StatCard index={1} libelle={t.profil.totalRegle} valeur={formatMontant(totalDepense)}
           Icone={Wallet} teinte="succes" />
-        <StatCard index={2} libelle="Dernière connexion"
+        <StatCard index={2} libelle={t.profil.derniereConnexion}
           valeur={compte?.derniere_connexion ? formatDate(compte.derniere_connexion) : '—'}
           Icone={CalendarClock} teinte="neutre"
-          detail={compte?.created_at ? `Membre depuis le ${formatDate(compte.created_at)}` : undefined} />
+          detail={compte?.created_at ? t.profil.membreDepuis(formatDate(compte.created_at)) : undefined} />
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Informations personnelles</CardTitle>
+          <CardTitle>{t.profil.infosTitre}</CardTitle>
           <CardDescription>
-            Ces informations figurent sur vos commandes et vos rapports.
+            {t.profil.infosDescription}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -164,31 +167,31 @@ export default function Profil() {
           >
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="prenom">Prénom</Label>
+                <Label htmlFor="prenom">{t.profil.prenom}</Label>
                 <Input id="prenom" value={identite.prenom} autoComplete="given-name"
                   onChange={(e) => setIdentite({ ...identite, prenom: e.target.value })} required />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="nom">Nom</Label>
+                <Label htmlFor="nom">{t.profil.nom}</Label>
                 <Input id="nom" value={identite.nom} autoComplete="family-name"
                   onChange={(e) => setIdentite({ ...identite, nom: e.target.value })} required />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="entreprise">Entreprise</Label>
+                <Label htmlFor="entreprise">{t.profil.entreprise}</Label>
                 <Input id="entreprise" value={identite.entreprise} autoComplete="organization"
                   onChange={(e) => setIdentite({ ...identite, entreprise: e.target.value })} />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="pays">Pays</Label>
+                <Label htmlFor="pays">{t.profil.pays}</Label>
                 <Input id="pays" value={identite.pays} autoComplete="country-name"
                   onChange={(e) => setIdentite({ ...identite, pays: e.target.value })} />
               </div>
               <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="telephone">Téléphone</Label>
+                <Label htmlFor="telephone">{t.profil.telephone}</Label>
                 <Input id="telephone" type="tel" value={identite.telephone} autoComplete="tel"
                   onChange={(e) => setIdentite({ ...identite, telephone: e.target.value })} />
                 <p className="flex items-center gap-1.5 text-xs text-[hsl(var(--muted))]">
-                  <Phone className="size-3" /> Utilisé uniquement pour vous joindre au sujet d&apos;une commande.
+                  <Phone className="size-3" /> {t.profil.telephoneAide}
                 </p>
               </div>
             </div>
@@ -197,16 +200,15 @@ export default function Profil() {
                 la modifier depuis cet écran, sans revérification, ouvrirait
                 une prise de contrôle silencieuse. */}
             <div className="space-y-1.5">
-              <Label htmlFor="email">Adresse email</Label>
+              <Label htmlFor="email">{t.profil.email}</Label>
               <Input id="email" value={compte?.email ?? ''} disabled readOnly />
               <p className="text-xs text-[hsl(var(--muted))]">
-                L&apos;adresse identifie votre compte et ne peut pas être modifiée ici.
-                Contactez le support pour en changer.
+                {t.profil.emailAide}
               </p>
             </div>
 
             <Button type="submit" chargement={enregistrerIdentite.isPending}>
-              <Check /> Enregistrer les modifications
+              <Check /> {t.profil.enregistrer}
             </Button>
           </form>
         </CardContent>
@@ -215,17 +217,16 @@ export default function Profil() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <KeyRound className="size-4 text-[hsl(var(--primary))]" /> Mot de passe
+            <KeyRound className="size-4 text-[hsl(var(--primary))]" /> {t.profil.motDePasseTitre}
           </CardTitle>
           <CardDescription>
-            Le mot de passe actuel est exigé : sans lui, une session laissée ouverte
-            suffirait à verrouiller le compte de son titulaire.
+            {t.profil.motDePasseDescription}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form className="space-y-5" onSubmit={soumettreMotDePasse}>
             <div className="space-y-1.5">
-              <Label htmlFor="actuel">Mot de passe actuel</Label>
+              <Label htmlFor="actuel">{t.profil.motDePasseActuel}</Label>
               <Input id="actuel" type="password" autoComplete="current-password"
                 value={motsDePasse.actuel}
                 onChange={(e) => setMotsDePasse({ ...motsDePasse, actuel: e.target.value })} required />
@@ -233,13 +234,13 @@ export default function Profil() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="nouveau">Nouveau mot de passe</Label>
+                <Label htmlFor="nouveau">{t.profil.nouveauMotDePasse}</Label>
                 <Input id="nouveau" type="password" autoComplete="new-password" minLength={8}
                   value={motsDePasse.nouveau}
                   onChange={(e) => setMotsDePasse({ ...motsDePasse, nouveau: e.target.value })} required />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="confirmation">Confirmation</Label>
+                <Label htmlFor="confirmation">{t.profil.confirmation}</Label>
                 <Input id="confirmation" type="password" autoComplete="new-password" minLength={8}
                   value={motsDePasse.confirmation}
                   onChange={(e) => setMotsDePasse({ ...motsDePasse, confirmation: e.target.value })} required />
@@ -257,8 +258,7 @@ export default function Profil() {
                   />
                 </div>
                 <p className="text-xs text-[hsl(var(--muted))]">
-                  Robustesse : <strong>{force.libelle}</strong> — 8 caractères minimum ;
-                  au-delà de 12, avec chiffres et symboles, la résistance augmente nettement.
+                  {t.profil.robustesseAvant} <strong>{force.libelle}</strong> {t.profil.robustesseApres}
                 </p>
               </div>
             )}
@@ -266,7 +266,7 @@ export default function Profil() {
             <ErreurChamp>{erreurMdp}</ErreurChamp>
 
             <Button type="submit" variant="outline" chargement={changerMotDePasse.isPending}>
-              <KeyRound /> Changer le mot de passe
+              <KeyRound /> {t.profil.changerMotDePasse}
             </Button>
           </form>
         </CardContent>
@@ -274,23 +274,20 @@ export default function Profil() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Sécurité du compte</CardTitle>
+          <CardTitle>{t.profil.securiteTitre}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-[hsl(var(--muted))]">
           <p className="flex items-start gap-2">
             <ShieldCheck className="mt-0.5 size-4 shrink-0 text-[hsl(var(--success))]" />
-            Votre mot de passe est conservé sous forme d&apos;empreinte bcrypt.
-            Personne, y compris l&apos;équipe Tunisia Invest, ne peut le lire.
+            {t.profil.securiteBcrypt}
           </p>
           <p className="flex items-start gap-2">
             <ShieldCheck className="mt-0.5 size-4 shrink-0 text-[hsl(var(--success))]" />
-            Aucun identifiant de paiement n&apos;est stocké : les règlements se font
-            sur le domaine de PayPal, qui ne nous transmet que l&apos;adresse du compte payeur.
+            {t.profil.securitePaiement}
           </p>
           <p className="flex items-start gap-2">
             <ShieldCheck className="mt-0.5 size-4 shrink-0 text-[hsl(var(--success))]" />
-            Vos droits sont relus en base à chaque requête : une modification de rôle
-            prend effet immédiatement, sans attendre l&apos;expiration de votre session.
+            {t.profil.securiteRoles}
           </p>
         </CardContent>
       </Card>

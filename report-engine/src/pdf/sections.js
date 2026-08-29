@@ -13,26 +13,49 @@
 //   "analyse" → section rédigée (le moyen de rédaction est documenté
 //               uniquement dans « Sources et méthodologie »)
 //   "data"    → contenu construit à partir des tables métier
+//
+// Le titre est désormais une CLÉ de libellé, résolue à la génération selon la
+// langue du rapport : la `key` identifie la section partout ailleurs (base,
+// corrections manuelles, ordre du PDF) et ne doit surtout pas bouger avec la
+// langue, alors que le titre affiché, lui, doit suivre.
 // ============================================================================
 
 const { ANALYSE_BADGE, DATA_BADGE } = require("./theme");
+const { L, DICTIONNAIRES, LANGUE_DEFAUT } = require("./libelles");
 
 const SECTION_CATALOG = [
-    { key: "introduction", title: "Présentation générale du secteur", source: "analyse" },
-    { key: "chiffres", title: "Chiffres clés et graphiques", source: "data" },
-    { key: "tendances", title: "Analyse des tendances", source: "analyse" },
-    { key: "acteurs", title: "Acteurs principaux", source: "data" },
-    { key: "cadre", title: "Cadre réglementaire et fiscal", source: "data" },
-    { key: "zones", title: "Zones géographiques et zones franches", source: "data" },
-    { key: "opportunites", title: "Opportunités identifiées", source: "analyse" },
-    { key: "risques", title: "Analyse des risques", source: "analyse" },
-    { key: "benchmarking", title: "Benchmarking régional", source: "analyse" },
-    { key: "recommandations", title: "Recommandations investisseur", source: "analyse" },
-    { key: "perspectives", title: "Perspectives 2025-2028", source: "analyse" },
-    { key: "sources", title: "Sources et méthodologie", source: "data" },
+    { key: "introduction", cleTitre: "sectionIntroduction", source: "analyse" },
+    { key: "chiffres", cleTitre: "sectionChiffres", source: "data" },
+    { key: "tendances", cleTitre: "sectionTendances", source: "analyse" },
+    { key: "acteurs", cleTitre: "sectionActeurs", source: "data" },
+    { key: "cadre", cleTitre: "sectionCadre", source: "data" },
+    { key: "zones", cleTitre: "sectionZones", source: "data" },
+    { key: "opportunites", cleTitre: "sectionOpportunites", source: "analyse" },
+    { key: "risques", cleTitre: "sectionRisques", source: "analyse" },
+    { key: "benchmarking", cleTitre: "sectionBenchmarking", source: "analyse" },
+    { key: "recommandations", cleTitre: "sectionRecommandations", source: "analyse" },
+    { key: "perspectives", cleTitre: "sectionPerspectives", source: "analyse" },
+    { key: "sources", cleTitre: "sectionSources", source: "data" },
 ].map((s) => ({ ...s, badge: s.source === "analyse" ? ANALYSE_BADGE : DATA_BADGE }));
 
-const SECTION_TITLES = SECTION_CATALOG.map((s) => s.title);
+/** Le catalogue, titres résolus dans la langue du document. */
+function catalogueSections(doc) {
+    const libelles = L(doc);
+    return SECTION_CATALOG.map((s) => ({ ...s, title: libelles[s.cleTitre] }));
+}
+
+/** Intitulés des sections, pour un sommaire ou une page de couverture. */
+function titresSections(doc) {
+    return catalogueSections(doc).map((s) => s.title);
+}
+
+/**
+ * Titres en français, sans document sous la main.
+ *
+ * Sert aux écrans d'administration et aux corrections manuelles, qui
+ * travaillent toujours sur la version d'origine du rapport.
+ */
+const SECTION_TITLES = SECTION_CATALOG.map((s) => DICTIONNAIRES[LANGUE_DEFAUT][s.cleTitre]);
 
 /**
  * Plancher théorique du document : couverture + sommaire + une page par
@@ -43,4 +66,7 @@ const SECTION_TITLES = SECTION_CATALOG.map((s) => s.title);
  */
 const MIN_PAGE_COUNT = SECTION_CATALOG.length + 2;
 
-module.exports = { SECTION_CATALOG, SECTION_TITLES, MIN_PAGE_COUNT };
+module.exports = {
+    SECTION_CATALOG, SECTION_TITLES, MIN_PAGE_COUNT,
+    catalogueSections, titresSections,
+};

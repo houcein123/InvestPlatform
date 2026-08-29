@@ -134,17 +134,44 @@ function buildDataContext(data) {
 }
 
 /** En-tête commun : rôle, secteur, données. Évite de répéter 7 fois le même bloc. */
-function header(secteur, contexte) {
+/**
+ * Consigne de langue de sortie.
+ *
+ * Elle est SÉPARÉE et placée en tête des consignes, pas glissée dans une liste :
+ * une instruction de langue noyée au milieu d'autres règles est la première que
+ * le modèle relâche sur une réponse longue, et une section qui repart en
+ * français au milieu d'un rapport anglais ne se voit qu'à la relecture du PDF.
+ *
+ * Les consignes restent rédigées en français même pour une sortie anglaise :
+ * elles s'adressent au modèle, pas au lecteur, et les prompts ont été réglés
+ * dans cette langue. C'est la SORTIE qui change, pas l'instruction.
+ */
+function consigneLangue(langue) {
+    if (langue === "en") {
+        return "- RÉDIGE INTÉGRALEMENT EN ANGLAIS. Chaque phrase de ta réponse doit être en\n"
+            + "  anglais, y compris les intitulés que tu introduis toi-même. Les noms propres\n"
+            + "  d'institutions tunisiennes (INS, BCT, FIPA, APII) restent tels quels, suivis\n"
+            + "  d'une traduction entre parenthèses à leur première occurrence.";
+    }
+    return "- Rédige en français, dans un style professionnel destiné à un investisseur étranger.";
+}
+
+function header(secteur, contexte, langue = "fr") {
+    const nom = langue === "en" ? (secteur.nom_en || secteur.nom) : secteur.nom;
+    const description = langue === "en"
+        ? (secteur.description_en || secteur.description)
+        : secteur.description;
+
     return `Tu es un expert en analyse économique et en investissement en Tunisie.
 
-SECTEUR ANALYSÉ : ${secteur.nom}
-DESCRIPTION : ${secteur.description || "—"}
+SECTEUR ANALYSÉ : ${nom}
+DESCRIPTION : ${description || "—"}
 
 DONNÉES OFFICIELLES DISPONIBLES :
 ${contexte}
 
 CONSIGNES GÉNÉRALES :
-- Rédige en français, dans un style professionnel destiné à un investisseur étranger.
+${consigneLangue(langue)}
 - Appuie-toi explicitement sur les chiffres ci-dessus lorsqu'ils sont pertinents.
 - N'invente aucune donnée chiffrée absente du bloc ci-dessus.
 - N'ajoute ni titre de section, ni introduction méta du type « Voici l'analyse ».
@@ -152,22 +179,22 @@ CONSIGNES GÉNÉRALES :
 }
 
 const prompts = {
-    introduction: (s, ctx) => `${header(s, ctx)}
+    introduction: (s, ctx, _b, langue) => `${header(s, ctx, langue)}
 TÂCHE — Présentation générale du secteur (environ 300 mots, en paragraphes rédigés,
 sans liste à puces) : taille et poids économique du secteur, place dans l'économie
 tunisienne, dynamique récente.`,
 
-    tendances: (s, ctx) => `${header(s, ctx)}
+    tendances: (s, ctx, _b, langue) => `${header(s, ctx, langue)}
 TÂCHE — Analyse des tendances sur les 5 dernières années (environ 350 mots) :
 évolutions chiffrées observées dans les séries ci-dessus, ruptures notables,
 mutations technologiques et réglementaires, dynamique de croissance.`,
 
-    opportunites: (s, ctx) => `${header(s, ctx)}
+    opportunites: (s, ctx, _b, langue) => `${header(s, ctx, langue)}
 TÂCHE — Les 5 principales opportunités d'investissement pour un investisseur
 étranger. Une opportunité par point, chacune avec : intitulé, justification
 chiffrée, horizon (court ou moyen terme) et régions concernées.`,
 
-    risques: (s, ctx) => `${header(s, ctx)}
+    risques: (s, ctx, _b, langue) => `${header(s, ctx, langue)}
 TÂCHE — Analyse des risques sectoriels (environ 300 mots), organisée en
 quatre volets : risques économiques, politiques et réglementaires, financiers
 et de change, opérationnels et environnementaux.`,
@@ -179,7 +206,7 @@ et de change, opérationnels et environnementaux.`,
      * La consigne est donc explicite sur ce qu'il faut faire quand la donnée
      * manque — décrire sans chiffrer, plutôt que produire un chiffre plausible.
      */
-    benchmarking: (s, ctx, comparatif) => `${header(s, ctx)}
+    benchmarking: (s, ctx, comparatif, langue) => `${header(s, ctx, langue)}
 ${buildBenchmarkContext(comparatif)}
 TÂCHE — Benchmarking régional. Compare la Tunisie UNIQUEMENT avec le Maroc et
 l'Égypte, en six points numérotés : 1. Position de la Tunisie, 2. Comparaison
@@ -193,12 +220,12 @@ comparaison chiffrée n'est pas disponible, formule-la en termes qualitatifs
 que le chiffre n'est pas disponible dans ce rapport. Un chiffre inventé
 décrédibiliserait l'ensemble du document.`,
 
-    recommandations: (s, ctx) => `${header(s, ctx)}
+    recommandations: (s, ctx, _b, langue) => `${header(s, ctx, langue)}
 TÂCHE — 5 recommandations stratégiques concrètes et actionnables pour un
 investisseur étranger : mode d'entrée sur le marché, localisation, partenariats,
 dispositifs fiscaux à mobiliser, calendrier de déploiement.`,
 
-    perspectives: (s, ctx) => `${header(s, ctx)}
+    perspectives: (s, ctx, _b, langue) => `${header(s, ctx, langue)}
 TÂCHE — Perspectives 2025-2028 : évolution attendue, puis trois scénarios
 chiffrés (optimiste, réaliste, pessimiste) avec leurs hypothèses, et les
 principaux défis à surveiller.`,
@@ -215,4 +242,4 @@ const SECTION_KEYS = [
     "perspectives",
 ];
 
-module.exports = { prompts, buildDataContext, buildBenchmarkContext, SECTION_KEYS };
+module.exports = { prompts, buildDataContext, buildBenchmarkContext, SECTION_KEYS, consigneLangue };

@@ -64,4 +64,36 @@ public class BenchmarkRegional {
     @JsonProperty("updated_at")
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+
+    /*
+     * Libellés anglais (migration 011).
+     *
+     * Servis à côté du français dans la même réponse, comme pour les secteurs :
+     * négocier la langue côté serveur invaliderait le cache du frontend à
+     * chaque bascule. NULL est normal — l'interface retombe alors sur le
+     * français plutôt que d'afficher un vide.
+     */
+    @JsonProperty("indicateur_en")
+    @Column(name = "indicateur_en")
+    private String indicateurEn;
+
+    @JsonProperty("unite_en")
+    @Column(name = "unite_en")
+    private String uniteEn;
+
+    @JsonProperty("commentaire_en")
+    @Column(name = "commentaire_en")
+    private String commentaireEn;
+
+    /**
+     * Libellé anglais de la source (migration 012).
+     *
+     * Contrairement aux séries sectorielles, les sources du comparatif régional
+     * sont des libellés composés (« Banque mondiale — World Development
+     * Indicators »), pas des sigles : elles se traduisent.
+     */
+    @JsonProperty("source_en")
+    @Column(name = "source_en")
+    private String sourceEn;
 }

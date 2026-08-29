@@ -59,6 +59,11 @@ public class AnalyseController {
             ligne.put("slug", secteur.getSlug());
             ligne.put("nom", secteur.getNom());
             ligne.put("description", secteur.getDescription());
+            // Les libelles anglais accompagnent le francais : le comparateur
+            // affichait des noms de secteurs francais en mode anglais, parce
+            // que cette reponse est construite champ par champ et les omettait.
+            ligne.put("nom_en", secteur.getNomEn());
+            ligne.put("description_en", secteur.getDescriptionEn());
             ligne.put("prix_rapport", secteur.getPrixRapport());
 
             // Un secteur sans chiffres clés apparaît quand même, avec des cases
@@ -102,6 +107,8 @@ public class AnalyseController {
                 indicateur.put("id", b.getId());
                 indicateur.put("indicateur", b.getIndicateur());
                 indicateur.put("unite", b.getUnite());
+                indicateur.put("indicateur_en", b.getIndicateurEn());
+                indicateur.put("unite_en", b.getUniteEn());
                 indicateur.put("annee", b.getAnnee());
                 indicateur.put("tunisie", b.getValeurTunisie());
                 indicateur.put("maroc", b.getValeurMaroc());
@@ -109,6 +116,7 @@ public class AnalyseController {
                 // La source accompagne la donnée : un chiffre sans provenance
                 // n'a aucune valeur dans un document d'investissement.
                 indicateur.put("source", b.getSource());
+                indicateur.put("source_en", b.getSourceEn());
                 indicateurs.add(indicateur);
             }
 
@@ -118,6 +126,7 @@ public class AnalyseController {
             groupe.put("secteurId", secteur.getId());
             groupe.put("slug", secteur.getSlug());
             groupe.put("secteur", secteur.getNom());
+            groupe.put("secteur_en", secteur.getNomEn());
             groupe.put("indicateurs", indicateurs);
             groupes.add(groupe);
         }

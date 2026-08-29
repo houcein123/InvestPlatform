@@ -6,6 +6,8 @@ import { ChevronDown } from 'lucide-react';
 import { useAuth } from '@/auth/AuthContext';
 import { cn } from '@/lib/utils';
 
+import { useTraduction } from '@/i18n';
+
 import { groupesVisibles, type Groupe } from './navigation';
 
 /** Le groupe contient-il la route affichée ? */
@@ -25,10 +27,11 @@ function groupeActif(groupe: Groupe, chemin: string) {
 export function BarreNavigation() {
   const { estConnecte, estAdmin } = useAuth();
   const { pathname } = useLocation();
-  const groupes = groupesVisibles(estConnecte, estAdmin);
+  const { t } = useTraduction();
+  const groupes = groupesVisibles(t, estConnecte, estAdmin);
 
   return (
-    <nav aria-label="Navigation principale" className="flex items-center gap-1">
+    <nav aria-label={t.nav.principale} className="flex items-center gap-1">
       {groupes.map((groupe) => {
         const actif = groupeActif(groupe, pathname);
 

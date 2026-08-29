@@ -44,6 +44,27 @@ public class Secteur {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    /*
+     * Libellés anglais (migration 009).
+     *
+     * Les DEUX langues partent au frontend dans la même réponse, plutôt que
+     * de servir la bonne selon un en-tête `Accept-Language`. La raison est
+     * pratique : le catalogue est mis en cache par React Query, et négocier la
+     * langue côté serveur invaliderait ce cache à chaque bascule — donc un
+     * aller-retour réseau pour un simple changement d'affichage. Le surcoût
+     * est de deux champs texte par secteur, pour six secteurs.
+     *
+     * NULL est un cas normal : un secteur créé sans traduction s'affiche avec
+     * son libellé français.
+     */
+    @JsonProperty("nom_en")
+    @Column(name = "nom_en")
+    private String nomEn;
+
+    @JsonProperty("description_en")
+    @Column(name = "description_en", columnDefinition = "TEXT")
+    private String descriptionEn;
+
     private String icone;
 
     @JsonProperty("prix_rapport")

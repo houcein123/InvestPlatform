@@ -4,12 +4,14 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { LogOut, Menu, Moon, Sun, TrendingUp, X } from 'lucide-react';
 
 import { useAuth } from '@/auth/AuthContext';
+import { useTraduction } from '@/i18n';
 import { Button } from '@/components/ui/button';
 import { cn, initiales } from '@/lib/utils';
 
 import { BarreNavigation } from './BarreNavigation';
 import { PiedDePage } from './PiedDePage';
 import { Sidebar } from './Sidebar';
+import { SelecteurLangue } from './SelecteurLangue';
 import { useTheme } from './ThemeProvider';
 
 /**
@@ -23,6 +25,7 @@ import { useTheme } from './ThemeProvider';
 export function AppShell({ children }: { children: ReactNode }) {
   const { compte, estConnecte, deconnecter } = useAuth();
   const { theme, basculer } = useTheme();
+  const { t } = useTraduction();
   const [tiroirOuvert, setTiroirOuvert] = useState(false);
   const location = useLocation();
 
@@ -34,7 +37,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             variant="ghost"
             size="icon"
             className="lg:hidden"
-            aria-label="Ouvrir la navigation"
+            aria-label={t.commun.ouvrirNavigation}
             onClick={() => setTiroirOuvert(true)}
           >
             <Menu />
@@ -56,11 +59,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="ml-auto flex items-center gap-2">
+            <SelecteurLangue />
+
             <Button
               variant="ghost"
               size="icon"
               onClick={basculer}
-              aria-label={theme === 'dark' ? 'Passer en thème clair' : 'Passer en thème sombre'}
+              aria-label={theme === 'dark' ? t.commun.themeClair : t.commun.themeSombre}
             >
               {theme === 'dark' ? <Sun /> : <Moon />}
             </Button>
@@ -72,19 +77,19 @@ export function AppShell({ children }: { children: ReactNode }) {
                     {compte?.prenom} {compte?.nom}
                   </span>
                   <span className="block text-xs text-[hsl(var(--muted))]">
-                    {compte?.role === 'admin' ? 'Administrateur' : 'Client'}
+                    {compte?.role === 'admin' ? t.role.administrateur : t.role.client}
                   </span>
                 </span>
                 <span className="grid size-9 place-items-center rounded-full bg-[hsl(var(--primary-soft))] text-sm font-bold text-[hsl(var(--primary))]">
                   {initiales(compte?.prenom, compte?.nom)}
                 </span>
-                <Button variant="ghost" size="icon" onClick={deconnecter} aria-label="Se déconnecter">
+                <Button variant="ghost" size="icon" onClick={deconnecter} aria-label={t.commun.seDeconnecter}>
                   <LogOut />
                 </Button>
               </div>
             ) : (
               <Button asChild size="sm">
-                <Link to="/login">Se connecter</Link>
+                <Link to="/login">{t.commun.seConnecter}</Link>
               </Button>
             )}
           </div>
@@ -133,7 +138,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               <div className="flex items-center justify-between border-b border-[hsl(var(--border))] p-4">
                 <span className="font-display font-bold">Navigation</span>
-                <Button variant="ghost" size="icon" onClick={() => setTiroirOuvert(false)} aria-label="Fermér">
+                <Button variant="ghost" size="icon" onClick={() => setTiroirOuvert(false)} aria-label={t.commun.fermer}>
                   <X />
                 </Button>
               </div>

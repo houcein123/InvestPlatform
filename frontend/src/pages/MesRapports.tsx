@@ -7,21 +7,24 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PanneauGeneration } from '@/features/rapport/PanneauGeneration';
 import { useGenerationRapport } from '@/features/rapport/useGenerationRapport';
+import { useTraduction } from '@/i18n';
+import { useChampTraduit } from '@/i18n/donnees';
 import { api, fileUrl } from '@/lib/api';
 import { cles } from '@/lib/queryClient';
 import { formatDate, formatMontant } from '@/lib/utils';
 
 export default function MesRapports() {
+  const { t } = useTraduction();
+  const champ = useChampTraduit();
   const achats = useQuery({ queryKey: cles.mesRapports, queryFn: api.mesRapports });
   const generation = useGenerationRapport();
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <header>
-        <h1 className="font-display text-2xl font-bold">Mes rapports</h1>
+        <h1 className="font-display text-2xl font-bold">{t.mesRapports.titre}</h1>
         <p className="mt-1 text-sm text-[hsl(var(--muted))]">
-          Vos commandes réglées et les documents livrés. Un rapport reste telechargeable
-          indefiniment.
+          {t.mesRapports.accroche}
         </p>
       </header>
 
@@ -50,11 +53,11 @@ export default function MesRapports() {
           <span className="grid size-12 place-items-center rounded-2xl bg-[hsl(var(--surface-muted))]">
             <ShoppingBag className="size-6 text-[hsl(var(--muted))]" />
           </span>
-          <p className="font-display font-semibold">Aucune commande pour le moment</p>
+          <p className="font-display font-semibold">{t.mesRapports.aucuneCommande}</p>
           <p className="max-w-sm text-sm text-[hsl(var(--muted))]">
-            Les rapports que vous commandez apparaîtront ici, avec leur lien de téléchargement.
+            {t.mesRapports.aucuneCommandeTexte}
           </p>
-          <Button asChild className="mt-2"><a href="/">Parcourir le catalogue</a></Button>
+          <Button asChild className="mt-2"><a href="/">{t.mesRapports.parcourirCatalogue}</a></Button>
         </div>
       )}
 
@@ -72,25 +75,25 @@ export default function MesRapports() {
             </span>
 
             <div className="min-w-0 flex-1">
-              <p className="font-semibold leading-tight">{achat.secteur}</p>
+              <p className="font-semibold leading-tight">{champ(achat, 'secteur')}</p>
               <p className="mt-1 text-xs text-[hsl(var(--muted))]">
-                Commande du {formatDate(achat.date_achat)} · {formatMontant(achat.montant)}
-                {achat.mode_paiement === 'simulation' && ' · démonstration'}
+                {t.mesRapports.commandeDu(formatDate(achat.date_achat))} · {formatMontant(achat.montant)}
+                {achat.mode_paiement === 'simulation' && ` · ${t.mesRapports.demonstration}`}
                 {/* Volume du document effectivement livre, pas celui annonce
                     au catalogue : deux rapports du meme secteur n'ont pas le
                     meme nombre de pages selon la longueur des analyses. */}
                 {achat.chemin_fichier && achat.nombre_pages
-                  ? ` · ${achat.nombre_pages} pages`
+                  ? ` · ${t.mesRapports.pages(achat.nombre_pages)}`
                   : ''}
               </p>
             </div>
 
             {achat.chemin_fichier ? (
               <div className="flex items-center gap-2">
-                <Badge variant="succes">Livré le {formatDate(achat.date_generation)}</Badge>
+                <Badge variant="succes">{t.mesRapports.livreLe(formatDate(achat.date_generation))}</Badge>
                 <Button asChild size="sm">
                   <a href={fileUrl(achat.chemin_fichier)} target="_blank" rel="noreferrer">
-                    <Download /> Télécharger
+                    <Download /> {t.mesRapports.telecharger}
                   </a>
                 </Button>
               </div>
@@ -98,14 +101,14 @@ export default function MesRapports() {
               /* Un achat regle dont le rapport manque : le droit vient de
                  l'achat verifie en base, la relance n'est jamais refacturee. */
               <div className="flex items-center gap-2">
-                <Badge variant="avertissement">Rapport à produire</Badge>
+                <Badge variant="avertissement">{t.mesRapports.aProduire}</Badge>
                 <Button
                   size="sm"
                   variant="outline"
                   chargement={generation.demarrage}
                   onClick={() => generation.relancer(achat.achat_id)}
                 >
-                  <RefreshCw /> Relancer
+                  <RefreshCw /> {t.mesRapports.relancer}
                 </Button>
               </div>
             )}

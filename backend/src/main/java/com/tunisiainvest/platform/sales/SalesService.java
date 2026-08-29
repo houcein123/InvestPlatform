@@ -59,6 +59,11 @@ public class SalesService {
         return new Commande(achat, secteur);
     }
 
+    /** Persiste un achat modifié (langue commandée, statut, référence). */
+    public Achat enregistrerAchat(Achat achat) {
+        return achats.save(achat);
+    }
+
     public Optional<Achat> trouverAchat(Long id) {
         return id == null ? Optional.empty() : achats.findById(id);
     }
@@ -98,7 +103,7 @@ public class SalesService {
     public List<Map<String, Object>> listerAchatsClient(Long idUtilisateur) {
         List<Object[]> lignes = entityManager.createNativeQuery("""
                 SELECT a.id, a.montant, a.date_achat, a.mode_paiement,
-                       s.id, s.nom,
+                       s.id, s.nom, s.nom_en,
                        r.id, r.chemin_fichier, r.date_generation, r.nombre_pages
                   FROM achats a
                   JOIN secteurs s ON s.id = a.id_secteur
@@ -126,13 +131,17 @@ public class SalesService {
             achat.put("mode_paiement", ligne[3]);
             achat.put("secteur_id", ligne[4]);
             achat.put("secteur", ligne[5]);
-            achat.put("rapport_id", ligne[6]);
-            achat.put("chemin_fichier", ligne[7]);
-            achat.put("date_generation", ligne[8]);
+            // Le nom anglais accompagne le français : « Mes rapports » affichait
+            // « Textile & Habillement » au milieu d'une interface anglaise, le
+            // libellé venant de la base et non du dictionnaire (migration 009).
+            achat.put("secteur_en", ligne[6]);
+            achat.put("rapport_id", ligne[7]);
+            achat.put("chemin_fichier", ligne[8]);
+            achat.put("date_generation", ligne[9]);
             // Nombre de pages du document RÉELLEMENT livré, écrit par le
             // moteur à la génération : le client lit le volume qu'il a reçu,
             // et non les pages annoncées au catalogue.
-            achat.put("nombre_pages", ligne[9]);
+            achat.put("nombre_pages", ligne[10]);
             return achat;
         }).toList();
     }
@@ -152,7 +161,7 @@ public class SalesService {
     @SuppressWarnings("unchecked")
     public List<Map<String, Object>> statistiquesVentes() {
         List<Object[]> lignes = entityManager.createNativeQuery("""
-                SELECT s.id, s.nom, s.slug, s.prix_rapport,
+                SELECT s.id, s.nom, s.nom_en, s.slug, s.prix_rapport,
                        COALESCE(v.nb_ventes, 0),
                        COALESCE(v.revenu, 0),
                        COALESCE(v.nb_ventes_simulees, 0),
@@ -181,13 +190,16 @@ public class SalesService {
             Map<String, Object> stat = new HashMap<>();
             stat.put("id", ligne[0]);
             stat.put("nom", ligne[1]);
-            stat.put("slug", ligne[2]);
-            stat.put("prix_rapport", ligne[3]);
-            stat.put("nb_ventes", ligne[4]);
-            stat.put("revenu", ligne[5]);
-            stat.put("nb_ventes_simulees", ligne[6]);
-            stat.put("revenu_simule", ligne[7]);
-            stat.put("nb_rapports_generes", ligne[8]);
+            // Le tableau de bord admin affiche ces noms : sans la version
+            // anglaise, « Ventes par secteur » restait francais en mode anglais.
+            stat.put("nom_en", ligne[2]);
+            stat.put("slug", ligne[3]);
+            stat.put("prix_rapport", ligne[4]);
+            stat.put("nb_ventes", ligne[5]);
+            stat.put("revenu", ligne[6]);
+            stat.put("nb_ventes_simulees", ligne[7]);
+            stat.put("revenu_simule", ligne[8]);
+            stat.put("nb_rapports_generes", ligne[9]);
             return stat;
         }).toList();
     }

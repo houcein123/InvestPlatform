@@ -3,6 +3,8 @@ import {
   Area, AreaChart, CartesianGrid, Legend, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 
+import { useTraduction } from '@/i18n';
+
 import type { SerieStatistique } from '@/lib/types';
 
 import { COULEUR_AXE, COULEUR_ESTIME, COULEUR_GRILLE, COULEUR_OBSERVE } from './palette';
@@ -25,6 +27,7 @@ const ANNEES_ESTIMEES = [2024, 2025, 2026, 2027, 2028] as const;
  * la seconde courbe : une case vide vaut mieux qu'un chiffre invente.
  */
 export function GraphiqueSerie({ serie, hauteur = 260 }: { serie: SerieStatistique; hauteur?: number }) {
+  const { t } = useTraduction();
   const donnees = useMemo(() => {
     const points = new Map<number, { annee: string; observe?: number | null; estime?: number | null }>();
 
@@ -85,7 +88,7 @@ export function GraphiqueSerie({ serie, hauteur = 260 }: { serie: SerieStatistiq
         <Area
           type="monotone"
           dataKey="observe"
-          name="Donnée observée"
+          name={t.admin.serieObservee}
           stroke={COULEUR_OBSERVE}
           strokeWidth={2.5}
           fill="url(#remplissage-observe)"
@@ -96,7 +99,7 @@ export function GraphiqueSerie({ serie, hauteur = 260 }: { serie: SerieStatistiq
           <Area
             type="monotone"
             dataKey="estime"
-            name="Estimation"
+            name={t.admin.serieEstimation}
             stroke={COULEUR_ESTIME}
             strokeWidth={2}
             strokeDasharray="6 4"

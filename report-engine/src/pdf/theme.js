@@ -36,8 +36,10 @@ const PAGE_MARGIN = 60;
 // chiffrées sourcées), pas l'outil qui l'a produit. Le moyen de production de
 // l'analyse est documenté à un seul endroit : la section « Sources et
 // méthodologie », en fin de rapport.
-const ANALYSE_BADGE = { text: "Analyse", color: COLORS.ai, bg: COLORS.aiBg };
-const DATA_BADGE = { text: "Données officielles", color: COLORS.data, bg: COLORS.dataBg };
+// Le libellé est une CLÉ, résolue au rendu selon la langue du document.
+// Le stocker en clair ici figerait le badge en français dans un rapport anglais.
+const ANALYSE_BADGE = { cleTexte: "badgeAnalyse", color: COLORS.ai, bg: COLORS.aiBg };
+const DATA_BADGE = { cleTexte: "badgeDonnees", color: COLORS.data, bg: COLORS.dataBg };
 
 // Libellés lisibles pour les champs "type" libres saisis par l'admin en base
 const TYPE_LABELS = {
@@ -55,32 +57,61 @@ const TYPE_LABELS = {
 
 // ── Formatage ──────────────────────────────────────────────────────────────
 
-function formatNumber(value, decimals = 0) {
+/**
+ * Nombre formaté selon la langue du rapport.
+ *
+ * Un lecteur francophone lit « 2 500,0 », un anglophone « 2,500.0 ». Servir le
+ * même séparateur aux deux fait douter du montant, et sur un document vendu à
+ * un investisseur, un doute sur un chiffre coûte la confiance dans tous les
+ * autres.
+ */
+function formatNumber(value, decimals = 0, langue = "fr") {
     if (value === null || value === undefined || value === "" || isNaN(value)) return "N/D";
     const fixed = Number(value).toFixed(decimals);
     const parts = fixed.split(".");
     const negative = parts[0].startsWith("-");
     let intPart = negative ? parts[0].slice(1) : parts[0];
-    intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-    return (negative ? "-" : "") + intPart + (parts[1] ? "," + parts[1] : "");
+
+    const anglais = langue === "en";
+    const separateurMilliers = anglais ? "," : " ";
+    const separateurDecimal = anglais ? "." : ",";
+
+    intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, separateurMilliers);
+    return (negative ? "-" : "") + intPart
+        + (parts[1] ? separateurDecimal + parts[1] : "");
 }
 
-function formatPercent(value, decimals = 1, withSign = false) {
+function formatPercent(value, decimals = 1, withSign = false, langue = "fr") {
     if (value === null || value === undefined || isNaN(value)) return "N/D";
     const num = Number(value);
     const sign = withSign && num > 0 ? "+" : "";
-    return `${sign}${formatNumber(num, decimals)} %`;
+    // L'espace avant % est une règle typographique française ; l'anglais colle
+    // le signe au nombre.
+    const espace = langue === "en" ? "" : " ";
+    return `${sign}${formatNumber(num, decimals, langue)}${espace}%`;
 }
 
-function formatMDT(value) {
+function formatMDT(value, langue = "fr") {
     if (value === null || value === undefined || isNaN(value)) return "N/D";
-    return `${formatNumber(value, 1)} MDT`;
+    return `${formatNumber(value, 1, langue)} MDT`;
 }
 
-function formatDateFR(input) {
+/**
+ * Date longue, dans la langue du rapport.
+ *
+ * Le nom reste `formatDateFR` — il est appelé depuis une trentaine d'endroits —
+ * mais la fonction accepte désormais une locale. « 29 August 2026 » au milieu
+ * d'un rapport anglais, contre « 29 août 2026 » : c'est le genre de détail qui
+ * trahit une traduction faite à moitié.
+ */
+const { L } = require("./libelles");
+const { assainirPourPdf } = require("./assainir");
+
+function formatDateFR(input, langue = "fr") {
     const d = input ? new Date(input) : new Date();
     if (isNaN(d.getTime())) return "N/D";
-    return new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric" }).format(d);
+    const locale = langue === "en" ? "en-GB" : "fr-FR";
+    return new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric" }).format(d);
 }
 
 function slugify(str) {
@@ -92,15 +123,24 @@ function slugify(str) {
 }
 
 function stripInlineMarkdown(str) {
-    return String(str || "")
+    return assainirPourPdf(str)
         .replace(/\*\*(.+?)\*\*/g, "$1")
         .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "$1")
         .replace(/`([^`]+)`/g, "$1")
         .trim();
 }
 
-function humanizeType(raw) {
+/**
+ * Libellé lisible d'un code de type.
+ *
+ * `doc` est optionnel pour ne pas casser les appels existants ; fourni, le
+ * libellé suit la langue du rapport. Un code inconnu est mis en forme de son
+ * mieux plutôt que masqué : mieux vaut « Pole industriel » qu'une case vide.
+ */
+function humanizeType(raw, doc) {
     if (!raw) return "";
+    const traduits = doc ? L(doc).types : null;
+    if (traduits && traduits[raw]) return traduits[raw];
     if (TYPE_LABELS[raw]) return TYPE_LABELS[raw];
     return String(raw).replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 }
@@ -187,7 +227,7 @@ function drawHeaderFooter(doc, sector, pageNum) {
         doc.font("Helvetica-Bold").fontSize(8.5).fillColor(COLORS.textMuted)
             .text("InvestPlatform", PAGE_MARGIN, 28, { lineBreak: false });
         doc.font("Helvetica").fontSize(8.5).fillColor(COLORS.textLight)
-            .text("Rapport Sectoriel", PAGE_MARGIN + 68, 28, { lineBreak: false });
+            .text(L(doc).entetePetit, PAGE_MARGIN + 68, 28, { lineBreak: false });
         doc.font("Helvetica").fontSize(8.5).fillColor(COLORS.textLight)
             .text(String(pageNum), 0, 28, { width: doc.page.width - PAGE_MARGIN, align: "right", lineBreak: false });
         doc.moveTo(PAGE_MARGIN, 44).lineTo(doc.page.width - PAGE_MARGIN, 44)
@@ -197,9 +237,9 @@ function drawHeaderFooter(doc, sector, pageNum) {
         doc.moveTo(PAGE_MARGIN, 810).lineTo(doc.page.width - PAGE_MARGIN, 810)
             .strokeColor(COLORS.border).lineWidth(1).stroke();
         doc.font("Helvetica").fontSize(7.5).fillColor(COLORS.textLight)
-            .text(`Secteur : ${sector}`, PAGE_MARGIN, 818, { lineBreak: false });
+            .text(L(doc).piedSecteur(sector), PAGE_MARGIN, 818, { lineBreak: false });
         doc.font("Helvetica").fontSize(7.5).fillColor(COLORS.textLight)
-            .text("Document confidentiel — usage réservé au destinataire", 0, 818, {
+            .text(L(doc).piedConfidentiel, 0, 818, {
                 width: doc.page.width - PAGE_MARGIN, align: "right", lineBreak: false,
             });
     });
@@ -246,7 +286,8 @@ function sectionHeader(doc, { index, total, title, badge, subtitle }) {
     doc.x = startX;
 
     const titleTop = doc.y;
-    const badgeW = badge ? measureBadgeWidth(doc, badge.text) : 0;
+    const texteBadge = badge ? L(doc)[badge.cleTexte] : "";
+    const badgeW = badge ? measureBadgeWidth(doc, texteBadge) : 0;
     const titleWidth = width - (badge ? badgeW + 14 : 0);
     doc.font("Helvetica-Bold").fontSize(19).fillColor(COLORS.primary)
         .text(title, startX, titleTop, { width: titleWidth });
@@ -255,7 +296,7 @@ function sectionHeader(doc, { index, total, title, badge, subtitle }) {
     const titleBottom = doc.y;
 
     if (badge) {
-        drawBadge(doc, badge.text, { x: startX + width - badgeW, y: titleTop + 4, color: badge.color, bg: badge.bg });
+        drawBadge(doc, texteBadge, { x: startX + width - badgeW, y: titleTop + 4, color: badge.color, bg: badge.bg });
     }
 
     doc.x = startX;
@@ -285,10 +326,29 @@ function emptyState(doc, message) {
     doc.x = startX;
 }
 
+/**
+ * Hauteur approchee d'une ligne de corps de texte (10.3 pt + lineGap 4.5).
+ * Sert a reserver de la place AVANT d'ecrire, quand le texte a venir n'est pas
+ * encore connu de l'appelant.
+ */
+const HAUTEUR_LIGNE = 17;
+
+/**
+ * Sous-titre, jamais separe du texte qu'il introduit.
+ *
+ * CE QUI A CHANGE. `ensureSpace(doc, 30)` ne reservait que la hauteur du titre
+ * lui-meme. Un titre tombant a 25 pt du bas de page tenait donc, et son
+ * paragraphe basculait seul a la page suivante : le lecteur trouvait un titre
+ * orphelin en bas d'une page, et en haut de la suivante un texte sans en-tete,
+ * qui donne l'impression qu'une partie du rapport a saute.
+ *
+ * On exige desormais la place du titre PLUS trois lignes de corps. A defaut,
+ * le titre part avec son contenu.
+ */
 function drawSubHeading(doc, text) {
     const startX = doc.page.margins.left;
     const width = contentWidth(doc);
-    ensureSpace(doc, 30);
+    ensureSpace(doc, 30 + HAUTEUR_LIGNE * 3);
     doc.moveDown(0.25);
     doc.x = startX;
     doc.font("Helvetica-Bold").fontSize(12.5).fillColor(COLORS.primaryDark)
@@ -308,10 +368,12 @@ module.exports = {
     formatDateFR,
     slugify,
     stripInlineMarkdown,
+    assainirPourPdf,
     humanizeType,
     contentWidth,
     tronquer,
     ensureSpace,
+    HAUTEUR_LIGNE,
     withoutBottomMargin,
     drawHeaderFooter,
     measureBadgeWidth,

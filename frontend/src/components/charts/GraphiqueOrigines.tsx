@@ -2,6 +2,8 @@ import {
   Bar, BarChart, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 
+import { useTraduction } from '@/i18n';
+
 import { COULEUR_AXE, couleurSerie } from './palette';
 import { InfobulleGraphique } from './InfobulleGraphique';
 
@@ -19,6 +21,7 @@ export interface Origine {
  * comme une liste.
  */
 export function GraphiqueOrigines({ donnees, hauteur }: { donnees: Origine[]; hauteur?: number }) {
+  const { t } = useTraduction();
   if (donnees.length === 0) {
     return (
       <p className="py-12 text-center text-sm text-[hsl(var(--muted))]">
@@ -47,7 +50,7 @@ export function GraphiqueOrigines({ donnees, hauteur }: { donnees: Origine[]; ha
           cursor={{ fill: 'hsl(var(--surface-muted))' }}
           content={(props) => <InfobulleGraphique {...props} unite="demande(s)" />}
         />
-        <Bar dataKey="valeur" name="Demandes" radius={[0, 6, 6, 0]} maxBarSize={22}>
+        <Bar dataKey="valeur" name={t.admin.serieDemandes} radius={[0, 6, 6, 0]} maxBarSize={22}>
           {donnees.map((origine, index) => (
             <Cell key={origine.nom} fill={couleurSerie(index)} />
           ))}

@@ -50,7 +50,23 @@ public class ReportController {
         this.rapports = rapports;
     }
 
-    public record DemandeGeneration(Long sectorId, Long achatId) {
+    /** Langues dans lesquelles un rapport peut être produit. */
+    private static final java.util.Set<String> LANGUES_RAPPORT = java.util.Set.of("fr", "en");
+
+    /**
+     * Ramène la langue demandée à une valeur produisible.
+     *
+     * Une langue inconnue vaut français plutôt qu'une erreur : le client a
+     * déjà payé, et refuser la génération pour un code de langue mal formé
+     * lui ferait perdre son rapport au lieu de le lui livrer.
+     */
+    private static String langueValide(String demandee) {
+        if (demandee == null) return "fr";
+        String code = demandee.trim().toLowerCase();
+        return LANGUES_RAPPORT.contains(code) ? code : "fr";
+    }
+
+    public record DemandeGeneration(Long sectorId, Long achatId, String langue) {
     }
 
     public record DemandeRelance(Long achatId) {
@@ -79,7 +95,14 @@ public class ReportController {
         // dans « Mes rapports ».
         Long utilisateurId = CompteCourant.exige().getId();
 
-        String jobId = moteur.demarrerGeneration(demande.sectorId(), achat.getId(), utilisateurId);
+        // La langue est ENREGISTRÉE sur l'achat avant le lancement : sans
+        // cela, une relance après un échec repartirait dans la langue de
+        // l'interface du moment, pas dans celle qui a été commandée.
+        String langue = langueValide(demande.langue());
+        achat.setLangueRapport(langue);
+        ventes.enregistrerAchat(achat);
+
+        String jobId = moteur.demarrerGeneration(demande.sectorId(), achat.getId(), utilisateurId, langue);
 
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of(
                 "success", true,
@@ -116,7 +139,10 @@ public class ReportController {
                 .filter(a -> idCompte.equals(a.getIdUtilisateur()))
                 .orElseThrow(() -> ApiException.notFound("Achat introuvable ou non réglé"));
 
-        String jobId = moteur.demarrerGeneration(achat.getIdSecteur(), achat.getId(), idCompte);
+        // La langue vient de l'ACHAT, jamais de la requête : c'est ce qui
+        // garantit qu'une relance rend le document commandé.
+        String jobId = moteur.demarrerGeneration(
+                achat.getIdSecteur(), achat.getId(), idCompte, langueValide(achat.getLangueRapport()));
 
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of(
                 "success", true,

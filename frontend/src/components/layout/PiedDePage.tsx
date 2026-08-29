@@ -2,6 +2,8 @@ import { Link } from 'react-router-dom';
 import { AlertTriangle, Mail, MapPin, Phone, TrendingUp } from 'lucide-react';
 
 import { useAuth } from '@/auth/AuthContext';
+import { useTraduction } from '@/i18n';
+import type { Dictionnaire } from '@/i18n/fr';
 import { ENTREPRISE, adressePostale, estRenseigne } from '@/lib/entreprise';
 
 /**
@@ -11,34 +13,36 @@ import { ENTREPRISE, adressePostale, estRenseigne } from '@/lib/entreprise';
  * laisser dans le pied de page reviendrait a ne rien masquer du tout, les deux
  * etant visibles sur le meme ecran.
  */
-const COLONNES = [
-  {
-    titre: 'Plateforme',
-    liens: [
-      { to: '/', libelle: 'Catalogue sectoriel' },
-      { to: '/mes-rapports', libelle: 'Mes rapports', connecte: true },
-      { to: '/analyse/secteurs', libelle: 'Comparateur de secteurs', connecte: true },
-      { to: '/analyse/regional', libelle: 'Comparatif régional', connecte: true },
-      { to: '/ressources/glossaire', libelle: 'Glossaire', connecte: true },
-    ],
-  },
-  {
-    titre: 'À propos',
-    liens: [
-      { to: '/a-propos', libelle: "Qui sommes-nous" },
-      { to: '/a-propos#methode', libelle: 'Notre méthode' },
-      { to: '/a-propos#sources', libelle: 'Sources de données' },
-    ],
-  },
-  {
-    titre: 'Informations légales',
-    liens: [
-      { to: '/mentions-legales', libelle: 'Mentions légales' },
-      { to: '/avertissement-risques', libelle: 'Avertissement sur les risques' },
-      { to: '/mentions-legales#donnees', libelle: 'Données personnelles' },
-    ],
-  },
-];
+function colonnes(t: Dictionnaire) {
+  return [
+    {
+      titre: t.pied.colonnePlateforme,
+      liens: [
+        { to: '/', libelle: t.nav.catalogue },
+        { to: '/mes-rapports', libelle: t.nav.mesRapports, connecte: true },
+        { to: '/analyse/secteurs', libelle: t.nav.comparateur, connecte: true },
+        { to: '/analyse/regional', libelle: t.nav.regional, connecte: true },
+        { to: '/ressources/glossaire', libelle: t.nav.glossaire, connecte: true },
+      ],
+    },
+    {
+      titre: t.pied.colonneAPropos,
+      liens: [
+        { to: '/a-propos', libelle: t.pied.quiSommesNous },
+        { to: '/a-propos#methode', libelle: t.pied.notreMethode },
+        { to: '/a-propos#sources', libelle: t.pied.sourcesDonnees },
+      ],
+    },
+    {
+      titre: t.pied.colonneLegal,
+      liens: [
+        { to: '/mentions-legales', libelle: t.pied.mentionsLegales },
+        { to: '/avertissement-risques', libelle: t.pied.avertissementRisques },
+        { to: '/mentions-legales#donnees', libelle: t.pied.donneesPersonnelles },
+      ],
+    },
+  ];
+}
 
 /**
  * Pied de page du portail.
@@ -52,6 +56,7 @@ export function PiedDePage() {
   const adresse = adressePostale();
   const { contact } = ENTREPRISE;
   const { estConnecte } = useAuth();
+  const { t } = useTraduction();
 
   return (
     <footer className="mt-16 border-t border-[hsl(var(--border))] bg-[hsl(var(--surface)/0.5)]">
@@ -66,9 +71,7 @@ export function PiedDePage() {
             </Link>
 
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-[hsl(var(--muted))]">
-              Rapports sectoriels sur l&apos;économie tunisienne, construits à partir des
-              données publiées par les organismes officiels et enrichis d&apos;analyses
-              rédigées à partir de ces mêmes chiffres.
+              {t.pied.presentation}
             </p>
 
             <ul className="mt-5 space-y-2 text-sm text-[hsl(var(--muted))]">
@@ -96,13 +99,13 @@ export function PiedDePage() {
               )}
               <li>
                 <Link to="/contact" className="font-medium text-[hsl(var(--primary))] hover:underline">
-                  Nous contacter
+                  {t.pied.nousContacter}
                 </Link>
               </li>
             </ul>
           </div>
 
-          {COLONNES.map((colonne) => (
+          {colonnes(t).map((colonne) => (
             <nav key={colonne.titre} aria-label={colonne.titre}>
               <p className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--foreground))]">
                 {colonne.titre}
@@ -128,21 +131,16 @@ export function PiedDePage() {
         <div className="mt-10 flex items-start gap-3 rounded-[var(--radius-control)] border border-[hsl(var(--warning)/0.35)] bg-[hsl(var(--warning)/0.08)] p-4">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[hsl(var(--warning))]" />
           <p className="text-xs leading-relaxed text-[hsl(var(--muted))]">
-            <strong className="text-[hsl(var(--foreground))]">Avertissement.</strong>{' '}
-            Les rapports proposés sur cette plateforme sont des documents d&apos;information
-            économique. Ils ne constituent ni un conseil en investissement, ni une
-            recommandation d&apos;achat ou de vente, ni une garantie de résultat. Les
-            projections qu&apos;ils contiennent sont des estimations calculées, signalées
-            comme telles, et ne préjugent pas de l&apos;évolution réelle des marchés.
-            Tout investissement comporte un risque de perte en capital.{' '}
+            <strong className="text-[hsl(var(--foreground))]">{t.pied.avertissementTitre}</strong>{' '}
+            {t.pied.avertissementTexte}{' '}
             <Link to="/avertissement-risques" className="font-medium text-[hsl(var(--primary))] hover:underline">
-              Lire l&apos;avertissement complet
+              {t.pied.avertissementLien}
             </Link>
           </p>
         </div>
 
         <div className="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-[hsl(var(--border))] pt-6 text-xs text-[hsl(var(--muted))]">
-          <p>© {new Date().getFullYear()} {ENTREPRISE.nom}. Tous droits réservés.</p>
+          <p>{t.pied.copyright(new Date().getFullYear(), ENTREPRISE.nom)}</p>
           <p>{ENTREPRISE.baseline}</p>
         </div>
       </div>

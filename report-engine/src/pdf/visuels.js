@@ -110,9 +110,19 @@ function texteLatin(valeur) {
 }
 
 /** Ligne de crédit affichée sous l'image : la licence l'exige, la lisibilité aussi. */
-function ligneCredit(photo) {
+/**
+ * Crédit d'une illustration.
+ *
+ * `doc` est optionnel : la fonction est appelée depuis des contextes qui n'ont
+ * pas le document sous la main, et un crédit photo français sous une image
+ * reste lisible. Quand le document est fourni, le préfixe suit sa langue.
+ */
+const { L } = require("./libelles");
+
+function ligneCredit(photo, doc) {
     const auteur = texteLatin(photo.auteur) || "auteur non transcriptible";
-    return `Photo : ${auteur} — ${photo.licence}, via Wikimedia Commons`;
+    const prefixe = doc ? L(doc).creditPhoto : "Photo : ";
+    return `${prefixe}${auteur} — ${photo.licence}, via Wikimedia Commons`;
 }
 
 // ── Bandeau de couverture ───────────────────────────────────────────────────
@@ -156,7 +166,7 @@ function dessinerBandeauCouverture(doc, secteur, { x, y, largeur, hauteur }) {
         doc.save();
         doc.opacity(0.75);
         doc.font("Helvetica").fontSize(6.5).fillColor(COLORS.white)
-            .text(ligneCredit(photo), x + 24, y + hauteur - 20, {
+            .text(ligneCredit(photo, doc), x + 24, y + hauteur - 20, {
                 width: largeur - 48, align: "right", lineBreak: false,
             });
         doc.opacity(1);
@@ -211,7 +221,7 @@ function dessinerIllustrationSection(doc, secteur, { rang = 2, hauteur = 150 } =
         .text(texteLatin(photo.legende), x, doc.y, { width: largeur, lineBreak: false });
     doc.y += 11;
     doc.font("Helvetica").fontSize(7).fillColor(COLORS.textLight)
-        .text(ligneCredit(photo), x, doc.y, { width: largeur, lineBreak: false });
+        .text(ligneCredit(photo, doc), x, doc.y, { width: largeur, lineBreak: false });
     doc.y += 16;
     doc.x = x;
 

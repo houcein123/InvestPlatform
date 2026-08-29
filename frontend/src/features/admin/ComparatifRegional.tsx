@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TableWrapper, Tbody, Td, Th, Thead, Tr, TrMessage } from '@/components/ui/table';
+import { useTraduction } from '@/i18n';
 import { api } from '@/lib/api';
 
 interface Benchmark {
@@ -38,6 +39,7 @@ type Brouillon = Record<number, Partial<Record<keyof Benchmark, string>>>;
  * corrige.
  */
 export function ComparatifRegional({ secteurId }: { secteurId: number }) {
+  const { t } = useTraduction();
   const queryClient = useQueryClient();
   const [brouillons, setBrouillons] = useState<Brouillon>({});
 
@@ -52,7 +54,7 @@ export function ComparatifRegional({ secteurId }: { secteurId: number }) {
     mutationFn: ({ id, valeurs }: { id: number; valeurs: Record<string, unknown> }) =>
       api.saveBenchmark(id, valeurs),
     onSuccess: (_, { id }) => {
-      toast.success('Indicateur enregistré');
+      toast.success(t.admin.indicateurEnregistre);
       setBrouillons((actuels) => {
         const suite = { ...actuels };
         delete suite[id];
@@ -63,7 +65,7 @@ export function ComparatifRegional({ secteurId }: { secteurId: number }) {
       queryClient.invalidateQueries({ queryKey: ['admin', 'secteurs', secteurId] });
     },
     onError: (erreur: Error) =>
-      toast.error('Enregistrement impossible', { description: erreur.message }),
+      toast.error(t.admin.enregistrementImpossible, { description: erreur.message }),
   });
 
   const donnees = benchmarks.data as
@@ -102,11 +104,11 @@ export function ComparatifRegional({ secteurId }: { secteurId: number }) {
     <Card>
       <CardHeader className="flex-row flex-wrap items-center justify-between gap-4">
         <CardTitle className="flex items-center gap-2 text-base">
-          <Globe2 className="size-4 text-[hsl(var(--primary))]" /> Comparatif régional
+          <Globe2 className="size-4 text-[hsl(var(--primary))]" /> {t.admin.comparatifTitre}
         </CardTitle>
         {donnees && (
           <Badge variant={donnees.renseignes ? 'succes' : 'avertissement'}>
-            {donnees.renseignes ?? 0} / {donnees.total ?? 0} renseigné(s)
+            {t.admin.comparatifRenseignes(donnees.renseignes ?? 0, donnees.total ?? 0)}
           </Badge>
         )}
       </CardHeader>
@@ -115,10 +117,9 @@ export function ComparatifRegional({ secteurId }: { secteurId: number }) {
         <p className="mx-5 flex items-start gap-2 rounded-[var(--radius-control)] bg-[hsl(var(--surface-muted))] px-4 py-3 text-xs leading-relaxed text-[hsl(var(--muted))] sm:mx-6">
           <Info className="mt-0.5 size-3.5 shrink-0" />
           <span>
-            Ces cases sont volontairement vides. Tant qu&apos;une valeur manque, le rapport
-            traite la comparaison en termes qualitatifs plutôt que d&apos;avancer un chiffre
-            étranger non sourcé. <strong>Renseignez uniquement des valeurs vérifiables</strong>,
-            avec leur source — elles apparaîtront dans le graphique comparatif du PDF.
+            {t.admin.comparatifAvant}
+            <strong>{t.admin.comparatifFort}</strong>
+            {t.admin.comparatifApres}
           </span>
         </p>
 
@@ -129,13 +130,13 @@ export function ComparatifRegional({ secteurId }: { secteurId: number }) {
         ) : (
           <TableWrapper className="px-2 sm:px-3">
             <Thead>
-              <Th>Indicateur</Th>
-              <Th>Unité</Th>
-              <Th numerique>Année</Th>
-              <Th numerique>Tunisie</Th>
-              <Th numerique>Maroc</Th>
-              <Th numerique>Égypte</Th>
-              <Th>Source</Th>
+              <Th>{t.admin.colonneIndicateur}</Th>
+              <Th>{t.admin.colonneUnite}</Th>
+              <Th numerique>{t.admin.comparatifAnnee}</Th>
+              <Th numerique>{t.regional.paysTunisie}</Th>
+              <Th numerique>{t.regional.paysMaroc}</Th>
+              <Th numerique>{t.regional.paysEgypte}</Th>
+              <Th>{t.admin.comparatifSource}</Th>
               <Th />
             </Thead>
             <Tbody>
@@ -170,7 +171,7 @@ export function ComparatifRegional({ secteurId }: { secteurId: number }) {
                     <Td>
                       <Input
                         aria-label={`${ligne.indicateur} — source`}
-                        placeholder="Organisme, année"
+                        placeholder={t.admin.comparatifSourcePlaceholder}
                         value={valeur(ligne, 'source')}
                         onChange={(e) => modifier(ligne.id, 'source', e.target.value)}
                         className="h-8 w-40"
@@ -185,7 +186,7 @@ export function ComparatifRegional({ secteurId }: { secteurId: number }) {
                           disabled={!modifie || enregistrer.isPending}
                           onClick={() => soumettre(ligne)}
                         >
-                          <Save /> Enregistrer
+                          <Save /> {t.admin.enregistrer}
                         </Button>
                       </div>
                     </Td>

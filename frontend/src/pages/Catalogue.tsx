@@ -4,16 +4,22 @@ import { AlertCircle, BarChart3, FileCheck2, ShieldCheck } from 'lucide-react';
 
 import { CarteSecteur } from '@/features/catalogue/CarteSecteur';
 import { SkeletonCarteSecteur } from '@/components/ui/skeleton';
+import { useTraduction } from '@/i18n';
+import type { Dictionnaire } from '@/i18n/fr';
 import { api } from '@/lib/api';
 import { cles } from '@/lib/queryClient';
 
-const ARGUMENTS_CLES = [
-  { Icone: FileCheck2, titre: 'Données officielles', texte: "Séries de l'Institut National de la Statistique, importées et tracées jusqu'à leur source." },
-  { Icone: BarChart3, titre: 'Perspectives chiffrées', texte: 'Estimations 2025-2028 calculées, présentées comme telles et jamais confondues avec une donnée publiée.' },
-  { Icone: ShieldCheck, titre: 'Livraison immédiate', texte: 'Rapport PDF de 14 pages minimum, généré et téléchargeable dès la validation du paiement.' },
-];
+/** Les trois arguments de la vitrine, dans la langue active. */
+function argumentsCles(t: Dictionnaire) {
+  return [
+    { Icone: FileCheck2, titre: t.catalogue.argumentDonnees, texte: t.catalogue.argumentDonneesTexte },
+    { Icone: BarChart3, titre: t.catalogue.argumentPerspectives, texte: t.catalogue.argumentPerspectivesTexte },
+    { Icone: ShieldCheck, titre: t.catalogue.argumentLivraison, texte: t.catalogue.argumentLivraisonTexte },
+  ];
+}
 
 export default function Catalogue() {
+  const { t } = useTraduction();
   const catalogue = useQuery({ queryKey: cles.catalogue, queryFn: api.catalogue });
   const paiement = useQuery({ queryKey: cles.configPaiement, queryFn: api.paymentConfig });
 
@@ -31,20 +37,18 @@ export default function Catalogue() {
           className="max-w-2xl"
         >
           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(var(--primary))]">
-            Rapports sectoriels — Tunisie
+            {t.catalogue.surtitre}
           </p>
           <h1 className="font-display text-3xl font-extrabold leading-tight sm:text-4xl">
-            Six secteurs, une lecture chiffrée du marché tunisien.
+            {t.catalogue.titre}
           </h1>
           <p className="mt-4 text-base leading-relaxed text-[hsl(var(--muted))]">
-            Chaque rapport réunit les données publiées par les sources officielles, leurs
-            perspectives estimées et une analyse rédigée à partir de ces mêmes chiffres.
-            Aucun montant n&apos;est avancé sans sa source.
+            {t.catalogue.accroche}
           </p>
         </motion.div>
 
         <div className="mt-8 grid gap-4 sm:grid-cols-3">
-          {ARGUMENTS_CLES.map(({ Icone, titre, texte }, index) => (
+          {argumentsCles(t).map(({ Icone, titre, texte }, index) => (
             <motion.div
               key={titre}
               initial={{ opacity: 0, y: 12 }}
@@ -63,9 +67,9 @@ export default function Catalogue() {
       <section>
         <div className="mb-5 flex items-end justify-between gap-4">
           <div>
-            <h2 className="font-display text-xl font-bold">Catalogue</h2>
+            <h2 className="font-display text-xl font-bold">{t.catalogue.sectionTitre}</h2>
             <p className="text-sm text-[hsl(var(--muted))]">
-              Consultez gratuitement les deux premières pages de chaque rapport avant de commander.
+              {t.catalogue.sectionAccroche}
             </p>
           </div>
         </div>
@@ -74,7 +78,7 @@ export default function Catalogue() {
           <div role="alert" className="surface-card flex items-start gap-3 p-5 text-sm">
             <AlertCircle className="size-5 shrink-0 text-[hsl(var(--danger))]" />
             <div>
-              <p className="font-semibold">Le catalogue n&apos;a pas pu être chargé.</p>
+              <p className="font-semibold">{t.catalogue.erreurTitre}</p>
               <p className="mt-1 text-[hsl(var(--muted))]">{(catalogue.error as Error).message}</p>
             </div>
           </div>

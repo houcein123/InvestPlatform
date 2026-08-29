@@ -4,6 +4,8 @@ import { ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/auth/AuthContext';
 import { cn } from '@/lib/utils';
 
+import { useTraduction } from '@/i18n';
+
 import { groupesVisibles } from './navigation';
 
 /**
@@ -15,10 +17,11 @@ import { groupesVisibles } from './navigation';
  */
 export function Sidebar() {
   const { estConnecte, estAdmin } = useAuth();
-  const groupes = groupesVisibles(estConnecte, estAdmin);
+  const { t } = useTraduction();
+  const groupes = groupesVisibles(t, estConnecte, estAdmin);
 
   return (
-    <nav aria-label="Navigation" className="flex flex-col gap-1 p-3">
+    <nav aria-label={t.nav.principale} className="flex flex-col gap-1 p-3">
       {groupes.map((groupe) => (
         <div key={groupe.cle} className="space-y-1">
           <p className="px-3 pb-1 pt-4 text-[0.6875rem] font-semibold uppercase tracking-wider text-[hsl(var(--muted))]">
@@ -52,7 +55,7 @@ export function Sidebar() {
 
       {estAdmin && (
         <p className="mt-4 flex items-center gap-2 px-3 text-[0.6875rem] text-[hsl(var(--muted))]">
-          <ShieldCheck className="size-3" /> Accès administrateur
+          <ShieldCheck className="size-3" /> {t.admin.accesAdministrateur}
         </p>
       )}
     </nav>

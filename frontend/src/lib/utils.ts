@@ -13,11 +13,36 @@ export function cn(...inputs: ClassValue[]) {
  * ISO, ce qui evite toute ambiguite avec le dinar algerien ou libyen dans un
  * document destine a des investisseurs etrangers.
  */
+/* ──────────────────────────────────────────────────────────────────────────
+   Locale de formatage.
+
+   Un investisseur anglophone lit « 1,250.50 », un francophone « 1 250,50 ».
+   Servir le même séparateur aux deux fait douter du montant — effet fâcheux
+   sur une page de paiement.
+
+   La locale est tenue dans une variable de module, alimentée par le
+   LangueProvider, plutôt que passée en argument aux quarante appels de
+   `formatMontant` et `formatDate` dispersés dans les pages. Le compromis est
+   assumé : c'est un état global, mais changer de langue re-rend tout l'arbre
+   depuis le contexte, si bien que chaque appel relit la valeur à jour.
+   ────────────────────────────────────────────────────────────────────────── */
+
+let localeCourante = 'fr-FR';
+
+/** Appelé par le LangueProvider à chaque changement de langue. */
+export function definirLocaleFormatage(locale: string) {
+  localeCourante = locale;
+}
+
+export function localeFormatage() {
+  return localeCourante;
+}
+
 export function formatMontant(valeur: number | string | null | undefined, devise = 'TND') {
   const nombre = typeof valeur === 'string' ? Number(valeur) : valeur;
   if (nombre === null || nombre === undefined || Number.isNaN(nombre)) return '—';
 
-  return new Intl.NumberFormat('fr-FR', {
+  return new Intl.NumberFormat(localeCourante, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(nombre) + ' ' + devise;
@@ -28,7 +53,7 @@ export function formatNombre(valeur: number | string | null | undefined, decimal
   const nombre = typeof valeur === 'string' ? Number(valeur) : valeur;
   if (nombre === null || nombre === undefined || Number.isNaN(nombre)) return '—';
 
-  return new Intl.NumberFormat('fr-FR', {
+  return new Intl.NumberFormat(localeCourante, {
     minimumFractionDigits: decimales,
     maximumFractionDigits: decimales,
   }).format(nombre);
@@ -39,7 +64,7 @@ export function formatDate(valeur: string | null | undefined, avecHeure = false)
   const date = new Date(valeur);
   if (Number.isNaN(date.getTime())) return '—';
 
-  return new Intl.DateTimeFormat('fr-FR', {
+  return new Intl.DateTimeFormat(localeCourante, {
     day: '2-digit',
     month: 'short',
     year: 'numeric',

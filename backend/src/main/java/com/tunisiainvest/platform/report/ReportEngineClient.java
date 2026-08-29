@@ -59,11 +59,14 @@ public class ReportEngineClient {
      * Le moteur répond immédiatement : la génération prend 20 à 40 secondes,
      * elle ne peut pas tenir dans une requête HTTP confortable.
      */
-    public String demarrerGeneration(Long sectorId, Long achatId, Long utilisateurId) {
+    public String demarrerGeneration(Long sectorId, Long achatId, Long utilisateurId, String langue) {
         Map<String, Object> corps = new HashMap<>();
         corps.put("sectorId", sectorId);
         corps.put("achatId", achatId);
         corps.put("utilisateurId", utilisateurId);
+        // Le moteur retombe sur le français si la valeur est absente : une
+        // langue manquante ne doit pas faire échouer une génération payée.
+        corps.put("langue", langue);
 
         JsonNode reponse = appeler("/internal/report/generate", corps);
         String jobId = reponse.path("jobId").asText(null);
@@ -87,10 +90,12 @@ public class ReportEngineClient {
     }
 
     /** Aperçu gratuit : couverture et sommaire, produits par les mêmes fonctions que le rapport payant. */
-    public byte[] apercu(Long sectorId) {
+    public byte[] apercu(Long sectorId, String langue) {
         try {
             return http.get()
-                    .uri("/internal/report/preview/{sectorId}", sectorId)
+                    .uri(b -> b.path("/internal/report/preview/{sectorId}")
+                            .queryParam("langue", langue)
+                            .build(sectorId))
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + jeton)
                     .accept(MediaType.APPLICATION_PDF)
                     .retrieve()

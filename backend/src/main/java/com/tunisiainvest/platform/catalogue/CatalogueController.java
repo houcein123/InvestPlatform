@@ -56,12 +56,17 @@ public class CatalogueController {
 
     @GetMapping("/{id}/preview")
     @Operation(summary = "Aperçu gratuit : couverture et sommaire, en PDF")
-    public ResponseEntity<byte[]> apercu(@PathVariable Long id) {
+    public ResponseEntity<byte[]> apercu(
+            @PathVariable Long id,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String langue) {
         Secteur secteur = secteurs.findById(id)
                 .filter(s -> Boolean.TRUE.equals(s.getEstActif()))
                 .orElseThrow(() -> ApiException.notFound("Secteur introuvable"));
 
-        byte[] pdf = moteur.apercu(id);
+        // Une langue absente ou inconnue vaut français : l'aperçu est public,
+        // il ne doit jamais échouer sur un paramètre mal formé.
+        String langueApercu = "en".equalsIgnoreCase(langue) ? "en" : "fr";
+        byte[] pdf = moteur.apercu(id, langueApercu);
 
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)

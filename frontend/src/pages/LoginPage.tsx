@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/ui/button';
 import { ErreurChamp, Input, Label } from '@/components/ui/input';
+import { useTraduction } from '@/i18n';
 
 type Mode = 'connexion' | 'inscription';
 
@@ -22,6 +23,7 @@ export default function LoginPage() {
   const [erreur, setErreur] = useState('');
   const [enCours, setEnCours] = useState(false);
   const { connecter, inscrire } = useAuth();
+  const { t } = useTraduction();
   const navigate = useNavigate();
   const emplacement = useLocation();
 
@@ -41,14 +43,14 @@ export default function LoginPage() {
         ? await connecter(donnees.email, donnees.mot_de_passe)
         : await inscrire(donnees);
 
-      toast.success(`Bienvenue, ${compte.prenom ?? compte.email}`);
+      toast.success(t.connexion.bienvenue(compte.prenom ?? compte.email));
 
       // Priorite a la destination interrompue. A defaut, un administrateur
       // atterrit sur son pilotage, un client sur le catalogue.
       const destination = retour ?? (compte.role === 'admin' ? '/admin' : '/');
       navigate(destination, { replace: true });
     } catch (probleme) {
-      setErreur(probleme instanceof Error ? probleme.message : 'Connexion impossible.');
+      setErreur(probleme instanceof Error ? probleme.message : t.connexion.echec);
     } finally {
       setEnCours(false);
     }
@@ -66,35 +68,35 @@ export default function LoginPage() {
         </span>
 
         <h1 className="font-display text-2xl font-bold">
-          {mode === 'connexion' ? 'Connexion' : 'Créer un compte'}
+          {mode === 'connexion' ? t.connexion.titreConnexion : t.connexion.titreInscription}
         </h1>
         <p className="mt-1 text-sm text-[hsl(var(--muted))]">
           {mode === 'connexion'
-            ? 'Accédez à vos rapports et a votre espace.'
-            : 'Retrouvez vos commandes et vos rapports au même endroit.'}
+            ? t.connexion.accrocheConnexion
+            : t.connexion.accrocheInscription}
         </p>
 
         <form onSubmit={soumettre} className="mt-6 space-y-4">
           {mode === 'inscription' && (
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="prenom">Prénom</Label>
+                <Label htmlFor="prenom">{t.connexion.prenom}</Label>
                 <Input id="prenom" name="prenom" autoComplete="given-name" required />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="nom">Nom</Label>
+                <Label htmlFor="nom">{t.connexion.nom}</Label>
                 <Input id="nom" name="nom" autoComplete="family-name" required />
               </div>
             </div>
           )}
 
           <div className="space-y-1.5">
-            <Label htmlFor="email">Adresse email</Label>
+            <Label htmlFor="email">{t.connexion.email}</Label>
             <Input id="email" name="email" type="email" autoComplete="email" required />
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="mot_de_passe">Mot de passe</Label>
+            <Label htmlFor="mot_de_passe">{t.connexion.motDePasse}</Label>
             <Input
               id="mot_de_passe"
               name="mot_de_passe"
@@ -104,18 +106,18 @@ export default function LoginPage() {
               required
             />
             {mode === 'inscription' && (
-              <p className="text-xs text-[hsl(var(--muted))]">8 caractères minimum.</p>
+              <p className="text-xs text-[hsl(var(--muted))]">{t.connexion.longueurMinimale}</p>
             )}
           </div>
 
           {mode === 'inscription' && (
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="entreprise">Entreprise (facultatif)</Label>
+                <Label htmlFor="entreprise">{t.connexion.entreprise}</Label>
                 <Input id="entreprise" name="entreprise" autoComplete="organization" />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="pays">Pays (facultatif)</Label>
+                <Label htmlFor="pays">{t.connexion.pays}</Label>
                 <Input id="pays" name="pays" autoComplete="country-name" />
               </div>
             </div>
@@ -124,18 +126,18 @@ export default function LoginPage() {
           <ErreurChamp>{erreur}</ErreurChamp>
 
           <Button type="submit" size="lg" className="w-full" chargement={enCours}>
-            {mode === 'connexion' ? 'Se connecter' : 'Créer mon compte'}
+            {mode === 'connexion' ? t.connexion.boutonConnexion : t.connexion.boutonInscription}
           </Button>
         </form>
 
         <p className="mt-5 text-center text-sm text-[hsl(var(--muted))]">
-          {mode === 'connexion' ? "Pas encore de compte ?" : 'Déjà inscrit ?'}{' '}
+          {mode === 'connexion' ? t.connexion.pasDeCompte : t.connexion.dejaInscrit}{' '}
           <button
             type="button"
             className="font-semibold text-[hsl(var(--primary))] underline-offset-4 hover:underline"
             onClick={() => { setMode(mode === 'connexion' ? 'inscription' : 'connexion'); setErreur(''); }}
           >
-            {mode === 'connexion' ? 'Créer un compte' : 'Se connecter'}
+            {mode === 'connexion' ? t.connexion.bascculerVersInscription : t.connexion.basculerVersConnexion}
           </button>
         </p>
       </motion.div>

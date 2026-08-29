@@ -21,11 +21,35 @@ const config = {
     internalToken: process.env.REPORT_ENGINE_TOKEN,
 
     groqApiKey: process.env.GROQ_API_KEY,
+
+    // Clé PROPRE à la relecture qualité.
+    //
+    // Deux clés plutôt qu'une, et ce n'est pas une coquetterie : les quotas
+    // Groq sont par clé et par minute. Faire passer les 7 rédactions ET les 7
+    // relectures par la même clé double la consommation sur la même limite,
+    // et c'est la rédaction — celle qui est payée — qui prend le 429 en
+    // premier. Sur une clé distincte, une relecture au quota épuisé n'empêche
+    // aucun rapport de sortir.
+    //
+    // Absente : la relecture retombe sur la clé principale, et si celle-ci
+    // manque aussi, elle se désactive proprement.
+    groqApiKeyVerification: process.env.GROQ_API_KEY_TEST_QUALITY || process.env.GROQ_API_KEY,
     // Groq retire régulièrement ses modèles : `llama-3.3-70b-versatile`, utilisé
     // au départ, a disparu du catalogue et renvoyait un 404 trompeur en pleine
     // génération. La liste réellement accessible se vérifie au démarrage
     // (voir groqService.verifierAcces) et via `npm run modeles`.
     groqModel: process.env.GROQ_MODEL || "openai/gpt-oss-120b",
+
+    // ── Relecture qualité ──
+    // Un SECOND modèle relit ce que le premier a écrit. Il doit être DIFFÉRENT
+    // du rédacteur : un modèle qui se relit lui-même valide ses propres
+    // inventions, parce que la même distribution qui a produit le chiffre le
+    // juge plausible. Un modèle tiers n'a pas cet angle mort.
+    //
+    // Vide ou identique au rédacteur → relecture désactivée, et le rapport est
+    // produit comme avant. C'est un filet, pas une dépendance.
+    groqModelVerification: process.env.GROQ_MODEL_VERIFICATION || "",
+    verificationActive: process.env.VERIFICATION_QUALITE !== "false",
 
     // Devise d'affichage et de comptabilité du catalogue
     devise: process.env.DEVISE || "TND",

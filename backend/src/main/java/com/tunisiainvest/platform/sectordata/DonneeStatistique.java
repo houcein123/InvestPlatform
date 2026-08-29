@@ -74,4 +74,21 @@ public class DonneeStatistique {
     @JsonProperty("updated_at")
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+
+    /*
+     * Libellés anglais (migration 011).
+     *
+     * Servis à côté du français dans la même réponse, comme pour les secteurs :
+     * négocier la langue côté serveur invaliderait le cache du frontend à
+     * chaque bascule. NULL est normal — l'interface retombe alors sur le
+     * français plutôt que d'afficher un vide.
+     */
+    @JsonProperty("indicateur_en")
+    @Column(name = "indicateur_en")
+    private String indicateurEn;
+
+    @JsonProperty("unite_en")
+    @Column(name = "unite_en")
+    private String uniteEn;
 }

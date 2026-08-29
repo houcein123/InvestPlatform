@@ -11,6 +11,9 @@ import { StatCard } from '@/components/ui/stat-card';
 import {
   ChampRecherche, TableWrapper, Tbody, Td, Th, Thead, Tr, TrMessage,
 } from '@/components/ui/table';
+import { useTraduction } from '@/i18n';
+import type { Dictionnaire } from '@/i18n/fr';
+import { useTitreRapport } from '@/i18n/donnees';
 import { api, fileUrl } from '@/lib/api';
 import { formatDate, formatNombre } from '@/lib/utils';
 
@@ -19,6 +22,8 @@ interface RapportAdmin {
   titre: string;
   secteur_id: number;
   secteur?: string;
+  /** Nom anglais du secteur, joint par le serveur pour recomposer le titre. */
+  secteur_en?: string | null;
   chemin_fichier: string | null;
   taille_fichier: number | null;
   nombre_pages: number | null;
@@ -34,6 +39,21 @@ function formatTaille(octets: number | null) {
   return `${(octets / (1024 * 1024)).toFixed(1)} Mo`;
 }
 
+/**
+ * Libelle affiche d'un statut.
+ *
+ * Le statut est un CODE en base (`genere`, `en_attente`) : on le traduit ici,
+ * jamais en base, ou il sert de critere de filtrage.
+ */
+function libelleStatut(statut: string | null | undefined, t: Dictionnaire): string {
+  switch (statut) {
+    case 'genere': return t.admin.statutGenere;
+    case 'en_attente': return t.admin.statutEnAttente;
+    case 'erreur': return t.admin.statutErreur;
+    default: return statut || t.admin.statutInconnu;
+  }
+}
+
 const ETIQUETTES: Record<string, 'succes' | 'avertissement' | 'danger' | 'neutre'> = {
   termine: 'succes',
   genere: 'succes',
@@ -42,6 +62,8 @@ const ETIQUETTES: Record<string, 'succes' | 'avertissement' | 'danger' | 'neutre
 };
 
 export default function Rapports() {
+  const { t } = useTraduction();
+  const titreRapport = useTitreRapport();
   const [recherche, setRecherche] = useState('');
 
   const rapports = useQuery({ queryKey: ['admin', 'rapports'], queryFn: api.rapports });
@@ -61,26 +83,25 @@ export default function Rapports() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="font-display text-2xl font-bold">Rapports produits</h1>
+        <h1 className="font-display text-2xl font-bold">{t.admin.rapportsTitre}</h1>
         <p className="mt-1 text-sm text-[hsl(var(--muted))]">
-          Documents générés par le moteur. Un rapport dont la rédaction a échoué peut
-          être corrigé à la main puis reconstruit, sans nouveau paiement pour le client.
+          {t.admin.rapportsAccroche}
         </p>
       </header>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard index={0} libelle="Rapports générés" valeur={formatNombre(tous.length)} Icone={FileText} />
-        <StatCard index={1} libelle="Fichiers disponibles" valeur={formatNombre(livres)}
+        <StatCard index={0} libelle={t.admin.rapportsGeneres} valeur={formatNombre(tous.length)} Icone={FileText} />
+        <StatCard index={1} libelle={t.admin.fichiersDisponibles} valeur={formatNombre(livres)}
           Icone={Download} teinte="succes"
-          detail={tous.length > livres ? `${tous.length - livres} sans fichier` : 'tous livrés'} />
-        <StatCard index={2} libelle="Volume total" valeur={formatTaille(poidsTotal)}
+          detail={tous.length > livres ? t.admin.sansFichier(tous.length - livres) : t.admin.tousLivres} />
+        <StatCard index={2} libelle={t.admin.volumeTotal} valeur={formatTaille(poidsTotal)}
           Icone={FileText} teinte="neutre" />
       </div>
 
       <Card>
         <CardHeader className="flex-row flex-wrap items-center justify-between gap-4">
-          <CardTitle>Historique</CardTitle>
-          <ChampRecherche valeur={recherche} onChange={setRecherche} placeholder="Rechercher un rapport…" />
+          <CardTitle>{t.admin.historique}</CardTitle>
+          <ChampRecherche valeur={recherche} onChange={setRecherche} placeholder={t.admin.rechercherRapport} />
         </CardHeader>
 
         <CardContent className="px-0 sm:px-0">
@@ -95,17 +116,17 @@ export default function Rapports() {
           ) : (
             <TableWrapper className="px-2 sm:px-3">
               <Thead>
-                <Th>Titre</Th>
-                <Th>Généré le</Th>
-                <Th numerique>Pages</Th>
-                <Th numerique>Taille</Th>
-                <Th>Statut</Th>
+                <Th>{t.admin.colonneTitre}</Th>
+                <Th>{t.admin.colonneGenereLe}</Th>
+                <Th numerique>{t.admin.colonnePages}</Th>
+                <Th numerique>{t.admin.colonneTaille}</Th>
+                <Th>{t.admin.colonneStatut}</Th>
                 <Th />
               </Thead>
               <Tbody>
                 {liste.length === 0 && (
                   <TrMessage colonnes={6}>
-                    {recherche ? 'Aucun rapport ne correspond.' : 'Aucun rapport produit pour le moment.'}
+                    {recherche ? t.admin.aucunRapportCorrespond : t.admin.aucunRapportProduit}
                   </TrMessage>
                 )}
 
@@ -116,7 +137,7 @@ export default function Rapports() {
                         <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-[hsl(var(--primary-soft))] text-[hsl(var(--primary))]">
                           <FileText className="size-4" />
                         </span>
-                        <span className="font-medium">{rapport.titre}</span>
+                        <span className="font-medium">{titreRapport(rapport)}</span>
                       </div>
                     </Td>
                     <Td className="whitespace-nowrap text-[hsl(var(--muted))]">
@@ -126,7 +147,7 @@ export default function Rapports() {
                     <Td numerique className="text-[hsl(var(--muted))]">{formatTaille(rapport.taille_fichier)}</Td>
                     <Td>
                       <Badge variant={ETIQUETTES[rapport.statut ?? ''] ?? 'neutre'}>
-                        {rapport.statut ?? 'inconnu'}
+                        {libelleStatut(rapport.statut, t)}
                       </Badge>
                     </Td>
                     <Td>
@@ -134,12 +155,12 @@ export default function Rapports() {
                         {rapport.chemin_fichier && (
                           <Button asChild size="sm" variant="ghost">
                             <a href={fileUrl(rapport.chemin_fichier)} target="_blank" rel="noreferrer">
-                              <Download /> Ouvrir
+                              <Download /> {t.admin.ouvrir}
                             </a>
                           </Button>
                         )}
                         <Button asChild size="sm" variant="outline">
-                          <Link to={`/admin/rapports/${rapport.id}`}><Pencil /> Corriger</Link>
+                          <Link to={`/admin/rapports/${rapport.id}`}><Pencil /> {t.admin.corriger}</Link>
                         </Button>
                       </div>
                     </Td>

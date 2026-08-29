@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
-  Bell, CreditCard, Database, Eye, LogOut, Monitor, Moon, RotateCcw,
+  Bell, CreditCard, Database, Eye, Languages, LogOut, Monitor, Moon, RotateCcw,
   Server, Sparkles, Sun,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -14,6 +14,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { LigneReglage, Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
+import { LANGUES, useTraduction, type Langue } from '@/i18n';
+import { fr as dicoFr } from '@/i18n/fr';
+import { en as dicoEn } from '@/i18n/en';
+import type { Dictionnaire } from '@/i18n/fr';
 import { api } from '@/lib/api';
 import { cles } from '@/lib/queryClient';
 import {
@@ -33,14 +37,23 @@ interface EtatSysteme {
   };
 }
 
-const THEMES = [
-  { cle: 'light' as const, libelle: 'Clair', Icone: Sun },
-  { cle: 'dark' as const, libelle: 'Sombre', Icone: Moon },
-];
+function themes(t: Dictionnaire) {
+  return [
+    { cle: 'light' as const, libelle: t.parametres.themeClair, Icone: Sun },
+    { cle: 'dark' as const, libelle: t.parametres.themeSombre, Icone: Moon },
+  ];
+}
+
+/** Nom natif de chaque langue, comme dans le selecteur de l'en-tete. */
+const NOMS_LANGUE: Record<Langue, string> = {
+  fr: dicoFr.metaLangue.nom,
+  en: dicoEn.metaLangue.nom,
+};
 
 export default function Parametres() {
   const { compte, estAdmin, deconnecter } = useAuth();
   const { theme, basculer } = useTheme();
+  const { t, langue, definirLangue } = useTraduction();
   const [preferences, setPreferences] = useState<Preferences>(lirePreferences);
 
   // Les préférences sont écrites à chaque changement plutôt que derrière un
@@ -65,23 +78,22 @@ export default function Parametres() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <header>
-        <h1 className="font-display text-2xl font-bold">Paramètres</h1>
+        <h1 className="font-display text-2xl font-bold">{t.parametres.titre}</h1>
         <p className="mt-1 text-sm text-[hsl(var(--muted))]">
-          Réglages d&apos;affichage propres à cet appareil, et état de votre compte.
+          {t.parametres.accroche}
         </p>
       </header>
 
       <Card>
         <CardHeader>
-          <CardTitle>Apparence</CardTitle>
+          <CardTitle>{t.parametres.apparenceTitre}</CardTitle>
           <CardDescription>
-            Le thème est mémorisé sur ce navigateur. Par défaut, il suit le réglage
-            de votre système.
+            {t.parametres.apparenceDescription}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
-            {THEMES.map(({ cle, libelle, Icone }) => {
+            {themes(t).map(({ cle, libelle, Icone }) => {
               const actif = theme === cle;
               return (
                 <button
@@ -109,16 +121,51 @@ export default function Parametres() {
             })}
           </div>
 
+          {/* La langue est reglable ici EN PLUS du selecteur de l'en-tete :
+              on vient dans les parametres pour changer un reglage durable, et
+              ne pas l'y trouver donne a croire qu'il n'existe pas. */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            {LANGUES.map((code) => {
+              const actif = langue === code;
+              return (
+                <button
+                  key={code}
+                  type="button"
+                  onClick={() => definirLangue(code)}
+                  aria-pressed={actif}
+                  className={cn(
+                    'flex items-center gap-3 rounded-[var(--radius-control)] border p-4 text-left transition-colors',
+                    actif
+                      ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary-soft))]'
+                      : 'border-[hsl(var(--border))] hover:bg-[hsl(var(--surface-muted))]',
+                  )}
+                >
+                  <Languages className={cn('size-5', actif && 'text-[hsl(var(--primary))]')} />
+                  <span className="text-sm font-medium">{NOMS_LANGUE[code]}</span>
+                  {actif && (
+                    <motion.span
+                      layoutId="langue-active"
+                      className="ml-auto size-2 rounded-full bg-[hsl(var(--primary))]"
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs leading-relaxed text-[hsl(var(--muted))]">
+            {t.parametres.langueDescription}
+          </p>
+
           <div className="divide-y divide-[hsl(var(--border))] border-t border-[hsl(var(--border))]">
             <LigneReglage
-              titre="Affichage compact"
-              description="Réduit les espacements des tableaux et des listes pour voir plus de lignes à l'écran."
+              titre={t.parametres.affichageCompact}
+              description={t.parametres.affichageCompactDescription}
             >
               <Switch
                 checked={preferences.densite === 'compacte'}
                 onCheckedChange={(actif) =>
                   setPreferences({ ...preferences, densite: actif ? 'compacte' : 'confortable' })}
-                aria-label="Affichage compact"
+                aria-label={t.parametres.affichageCompact}
               />
             </LigneReglage>
           </div>
@@ -127,39 +174,39 @@ export default function Parametres() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Rapports et notifications</CardTitle>
+          <CardTitle>{t.parametres.rapportsTitre}</CardTitle>
         </CardHeader>
         <CardContent className="divide-y divide-[hsl(var(--border))] py-0">
           <LigneReglage
-            titre="Ouvrir le PDF automatiquement"
-            description="Dès qu'une génération aboutit, le rapport s'ouvre dans un nouvel onglet."
+            titre={t.parametres.ouvrirPdf}
+            description={t.parametres.ouvrirPdfDescription}
           >
             <Switch
               checked={preferences.ouvrirPdfAutomatiquement}
               onCheckedChange={() => basculerPreference('ouvrirPdfAutomatiquement')}
-              aria-label="Ouvrir le PDF automatiquement"
+              aria-label={t.parametres.ouvrirPdf}
             />
           </LigneReglage>
 
           <LigneReglage
-            titre="Afficher les estimations"
-            description="Présente les projections 2025-2028 à côté des données publiées. Elles restent visuellement distinctes : jamais confondues avec un chiffre officiel."
+            titre={t.parametres.afficherEstimations}
+            description={t.parametres.afficherEstimationsDescription}
           >
             <Switch
               checked={preferences.afficherProjections}
               onCheckedChange={() => basculerPreference('afficherProjections')}
-              aria-label="Afficher les estimations"
+              aria-label={t.parametres.afficherEstimations}
             />
           </LigneReglage>
 
           <LigneReglage
-            titre="Notifications à l'écran"
-            description="Confirmations de paiement, fin de génération et messages d'erreur."
+            titre={t.parametres.notifications}
+            description={t.parametres.notificationsDescription}
           >
             <Switch
               checked={preferences.notificationsActives}
               onCheckedChange={() => basculerPreference('notificationsActives')}
-              aria-label="Notifications à l'écran"
+              aria-label={t.parametres.notifications}
             />
           </LigneReglage>
         </CardContent>
@@ -167,19 +214,19 @@ export default function Parametres() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Compte</CardTitle>
+          <CardTitle>{t.parametres.compteTitre}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <dl className="grid gap-3 sm:grid-cols-2">
             <div>
-              <dt className="text-xs uppercase tracking-wide text-[hsl(var(--muted))]">Adresse email</dt>
+              <dt className="text-xs uppercase tracking-wide text-[hsl(var(--muted))]">{t.parametres.adresseEmail}</dt>
               <dd className="mt-0.5 text-sm font-medium">{compte?.email}</dd>
             </div>
             <div>
-              <dt className="text-xs uppercase tracking-wide text-[hsl(var(--muted))]">Rôle</dt>
+              <dt className="text-xs uppercase tracking-wide text-[hsl(var(--muted))]">{t.parametres.role}</dt>
               <dd className="mt-0.5">
                 <Badge variant={estAdmin ? 'accent' : 'primaire'}>
-                  {estAdmin ? 'Administrateur' : 'Client'}
+                  {estAdmin ? t.role.administrateur : t.role.client}
                 </Badge>
               </dd>
             </div>
@@ -189,13 +236,13 @@ export default function Parametres() {
             <Button variant="outline" size="sm" onClick={() => {
               reinitialiserPreferences();
               setPreferences(lirePreferences());
-              toast.success('Préférences réinitialisées');
+              toast.success(t.parametres.preferencesReinitialisees);
             }}>
-              <RotateCcw /> Réinitialiser les préférences
+              <RotateCcw /> {t.parametres.reinitialiser}
             </Button>
 
             <Button variant="danger" size="sm" onClick={deconnecter}>
-              <LogOut /> Se déconnecter
+              <LogOut /> {t.commun.seDeconnecter}
             </Button>
           </div>
         </CardContent>
@@ -204,24 +251,21 @@ export default function Parametres() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Database className="size-4 text-[hsl(var(--primary))]" /> Données et confidentialité
+            <Database className="size-4 text-[hsl(var(--primary))]" /> {t.parametres.donneesTitre}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2.5 text-sm text-[hsl(var(--muted))]">
           <p className="flex items-start gap-2">
             <Eye className="mt-0.5 size-4 shrink-0" />
-            Les réglages de cette page ne quittent pas ce navigateur : ils sont
-            stockés localement, jamais transmis au serveur ni rattachés à votre compte.
+            {t.parametres.donneesLocal}
           </p>
           <p className="flex items-start gap-2">
             <CreditCard className="mt-0.5 size-4 shrink-0" />
-            Pour chaque règlement, seules l&apos;adresse du compte payeur et la référence
-            de transaction sont conservées — la trace comptable, rien de plus.
+            {t.parametres.donneesPaiement}
           </p>
           <p className="flex items-start gap-2">
             <Bell className="mt-0.5 size-4 shrink-0" />
-            Les rapports que vous achetez restent accessibles dans « Mes rapports »
-            sans limite de durée.
+            {t.parametres.donneesConservation}
           </p>
         </CardContent>
       </Card>
@@ -232,9 +276,9 @@ export default function Parametres() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Server className="size-4 text-[hsl(var(--primary))]" /> État des services
+              <Server className="size-4 text-[hsl(var(--primary))]" /> {t.parametres.servicesTitre}
             </CardTitle>
-            <CardDescription>Paiement et moteur de rédaction.</CardDescription>
+            <CardDescription>{t.parametres.servicesDescription}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {systeme.isLoading && <Skeleton className="h-24 w-full" />}
@@ -249,28 +293,28 @@ export default function Parametres() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="rounded-[var(--radius-control)] border border-[hsl(var(--border))] p-4">
                   <p className="flex items-center gap-2 text-sm font-semibold">
-                    <CreditCard className="size-4" /> Paiement
+                    <CreditCard className="size-4" /> {t.parametres.servicePaiement}
                   </p>
                   <div className="mt-3 space-y-2 text-xs text-[hsl(var(--muted))]">
                     <p className="flex items-center justify-between gap-3">
-                      <span>Mode</span>
+                      <span>{t.parametres.serviceMode}</span>
                       <Badge variant={etat.paiement?.mode === 'paypal' ? 'primaire' : 'neutre'}>
                         {etat.paiement?.mode ?? '—'}
                       </Badge>
                     </p>
                     <p className="flex items-center justify-between gap-3">
-                      <span>Environnement</span>
+                      <span>{t.parametres.serviceEnvironnement}</span>
                       {/* Un environnement « live » débite de l'argent réel :
                           il doit sauter aux yeux, pas se fondre dans la page. */}
                       <Badge variant={etat.paiement?.argentReel ? 'danger' : 'avertissement'}>
                         {etat.paiement?.environnement ?? '—'}
-                        {etat.paiement?.argentReel ? ' · argent réel' : ' · test'}
+                        {etat.paiement?.argentReel ? t.parametres.serviceArgentReel : t.parametres.serviceTest}
                       </Badge>
                     </p>
                     <p className="flex items-center justify-between gap-3">
-                      <span>Identifiants</span>
+                      <span>{t.parametres.serviceIdentifiants}</span>
                       <Badge variant={etat.paiement?.configure ? 'succes' : 'neutre'}>
-                        {etat.paiement?.configure ? 'configurés' : 'absents'}
+                        {etat.paiement?.configure ? t.parametres.serviceConfigures : t.parametres.serviceAbsents}
                       </Badge>
                     </p>
                   </div>
@@ -278,31 +322,31 @@ export default function Parametres() {
 
                 <div className="rounded-[var(--radius-control)] border border-[hsl(var(--border))] p-4">
                   <p className="flex items-center gap-2 text-sm font-semibold">
-                    <Sparkles className="size-4" /> Moteur de rapports
+                    <Sparkles className="size-4" /> {t.parametres.serviceMoteur}
                   </p>
                   <div className="mt-3 space-y-2 text-xs text-[hsl(var(--muted))]">
                     <p className="flex items-center justify-between gap-3">
-                      <span>Disponibilité</span>
+                      <span>{t.parametres.serviceDisponibilite}</span>
                       <Badge variant={etat.moteurRapports?.joignable === false ? 'danger' : 'succes'}>
-                        {etat.moteurRapports?.joignable === false ? 'injoignable' : 'en ligne'}
+                        {etat.moteurRapports?.joignable === false ? t.parametres.serviceInjoignable : t.parametres.serviceEnLigne}
                       </Badge>
                     </p>
                     <p className="flex items-center justify-between gap-3">
-                      <span>Rédaction</span>
+                      <span>{t.parametres.serviceRedaction}</span>
                       <Badge variant={etat.moteurRapports?.redaction?.configure ? 'succes' : 'avertissement'}>
-                        {etat.moteurRapports?.redaction?.configure ? 'active' : 'clé absente'}
+                        {etat.moteurRapports?.redaction?.configure ? t.parametres.serviceActive : t.parametres.serviceCleAbsente}
                       </Badge>
                     </p>
                     {etat.moteurRapports?.redaction?.modele && (
                       <p className="flex items-center justify-between gap-3">
-                        <span>Modèle</span>
+                        <span>{t.parametres.serviceModele}</span>
                         <span className="truncate font-mono text-[0.6875rem]">
                           {etat.moteurRapports.redaction.modele}
                         </span>
                       </p>
                     )}
                     <p className="flex items-center justify-between gap-3">
-                      <span>Générations en cours</span>
+                      <span>{t.parametres.serviceGenerations}</span>
                       <span className="tabular font-semibold">
                         {etat.moteurRapports?.generationsEnCours ?? 0}
                       </span>
@@ -314,7 +358,7 @@ export default function Parametres() {
 
             <Button variant="ghost" size="sm" onClick={() => systeme.refetch()}
               chargement={systeme.isFetching}>
-              <Monitor /> Actualiser
+              <Monitor /> {t.parametres.actualiser}
             </Button>
           </CardContent>
         </Card>

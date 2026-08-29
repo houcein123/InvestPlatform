@@ -99,7 +99,8 @@ export const api = {
   // ── Catalogue public (CDC section 3) ──
   catalogue: () => request<{ secteurs: Secteur[] }>('/catalogue', { auth: false }),
   secteur: (id: number) => request<{ secteur: Secteur }>(`/catalogue/${id}`, { auth: false }),
-  previewUrl: (sectorId: number) => `${BASE_URL}/api/catalogue/${sectorId}/preview`,
+  previewUrl: (sectorId: number, langue?: string) =>
+    `${BASE_URL}/api/catalogue/${sectorId}/preview${langue ? `?langue=${langue}` : ''}`,
 
   // ── Paiement (CDC section 6, etape 2) ──
   paymentConfig: () => request<ConfigPaiement>('/payment/config', { auth: false }),
@@ -109,8 +110,13 @@ export const api = {
     request<PaiementConfirme>('/payment/capture', { method: 'POST', body: { orderId, achatId, ...payeur } }),
 
   // ── Génération (CDC section 6, etape 3) ──
-  generateReport: (sectorId: number, achatId: number) =>
-    request<{ jobId: string; dureeEstimeeSec: number }>('/report/generate', { method: 'POST', body: { sectorId, achatId } }),
+  /**
+   * `langue` est la langue du DOCUMENT, pas celle de l'interface : un lecteur
+   * francophone peut commander un rapport anglais pour un partenaire. Le
+   * serveur l'enregistre sur l'achat et la rejoue en cas de relance.
+   */
+  generateReport: (sectorId: number, achatId: number, langue: string) =>
+    request<{ jobId: string; dureeEstimeeSec: number }>('/report/generate', { method: 'POST', body: { sectorId, achatId, langue } }),
   reportStatus: (jobId: string) => request<{ job: JobGeneration }>(`/report/status/${jobId}`, { auth: false }),
   mesRapports: () => request<{ achats: AchatClient[] }>('/report/mes-rapports'),
   relancerRapport: (achatId: number) =>

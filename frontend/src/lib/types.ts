@@ -29,6 +29,12 @@ export interface Secteur {
   slug: string;
   nom: string;
   description: string | null;
+  /**
+   * Libelles anglais (migration 009), nuls tant qu'un secteur n'est pas
+   * traduit. Ne les lisez pas directement : `libelleSecteur` gere le repli.
+   */
+  nom_en?: string | null;
+  description_en?: string | null;
   icone: string | null;
   prix_rapport: number;
   nombre_pages: number;
@@ -89,6 +95,8 @@ export interface CommandeCreee {
   mode: ModePaiement;
   achatId: number;
   secteur: string;
+  /** Nom anglais du secteur (migration 009) ; null si non traduit. */
+  secteur_en?: string | null;
   montantAffiche: number;
   deviseAffichage: string;
   orderId?: string;
@@ -121,6 +129,16 @@ export interface JobGeneration {
   nombrePages?: number | null;
   erreur: string | null;
   sectionsManquantes?: string[];
+  /**
+   * Relecture par le second modele : sections dont un chiffre n'a pas ete
+   * retrouve dans les donnees. Absent si la relecture n'est pas configuree.
+   */
+  controleQualite?: {
+    verifiees: number;
+    suspectes: { section: string; chiffres: string[]; remarque: string }[];
+    echecs: number;
+    modele: string;
+  } | null;
 }
 
 export interface AchatClient {
@@ -130,6 +148,8 @@ export interface AchatClient {
   mode_paiement: ModePaiement;
   secteur_id: number;
   secteur: string;
+  /** Nom anglais du secteur (migration 009) ; null si non traduit. */
+  secteur_en?: string | null;
   rapport_id: number | null;
   chemin_fichier: string | null;
   date_generation: string | null;

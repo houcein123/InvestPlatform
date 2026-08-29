@@ -92,7 +92,13 @@ public class AdminController {
         return donnees;
     }
 
-    public record MajSecteur(String nom, String description, java.math.BigDecimal prix_rapport, Boolean est_actif) {
+    /**
+     * Les libellés anglais sont facultatifs : un secteur reste modifiable sans
+     * qu'on impose de le traduire, et l'interface retombe alors sur le
+     * français (migration 009).
+     */
+    public record MajSecteur(String nom, String description, String nom_en, String description_en,
+            java.math.BigDecimal prix_rapport, Boolean est_actif) {
     }
 
     @PutMapping("/secteurs/{id}")
@@ -100,6 +106,8 @@ public class AdminController {
         Secteur secteur = exigerSecteur(id);
         if (demande.nom() != null) secteur.setNom(demande.nom());
         if (demande.description() != null) secteur.setDescription(demande.description());
+        if (demande.nom_en() != null) secteur.setNomEn(demande.nom_en());
+        if (demande.description_en() != null) secteur.setDescriptionEn(demande.description_en());
         if (demande.prix_rapport() != null) secteur.setPrixRapport(demande.prix_rapport());
         if (demande.est_actif() != null) secteur.setEstActif(demande.est_actif());
         secteur.setUpdatedAt(LocalDateTime.now());
@@ -292,7 +300,44 @@ public class AdminController {
 
     @GetMapping("/rapports")
     public Map<String, Object> listerRapports() {
-        return Map.of("rapports", rapports.findTop50ByOrderByDateGenerationDesc());
+        return Map.of("rapports", avecSecteur(rapports.findTop50ByOrderByDateGenerationDesc()));
+    }
+
+    /**
+     * Ajoute le nom du secteur, dans les deux langues, à une liste de rapports.
+     *
+     * POURQUOI PAS SIMPLEMENT LE TITRE STOCKÉ. `rapports.titre` est figé à la
+     * génération — « Rapport Sectoriel — Agriculture » — et reste donc français
+     * dans une interface anglaise. Le réécrire en base falsifierait la trace de
+     * ce qui a été produit et livré ; on transmet plutôt de quoi RECOMPOSER le
+     * titre à l'affichage, en gardant le titre d'origine comme repli.
+     */
+    private List<Map<String, Object>> avecSecteur(List<Rapport> liste) {
+        // Une seule lecture des secteurs pour toute la liste : résoudre secteur
+        // par secteur ferait cinquante requêtes pour six valeurs distinctes.
+        Map<Long, Secteur> parId = new HashMap<>();
+        secteurs.findAll().forEach(s -> parId.put(s.getId(), s));
+
+        return liste.stream().map(rapport -> {
+            Map<String, Object> vue = new HashMap<>();
+            vue.put("id", rapport.getId());
+            vue.put("secteurId", rapport.getSecteurId());
+            vue.put("titre", rapport.getTitre());
+            vue.put("cheminFichier", rapport.getCheminFichier());
+            vue.put("chemin_fichier", rapport.getCheminFichier());
+            vue.put("tailleFichier", rapport.getTailleFichier());
+            vue.put("taille_fichier", rapport.getTailleFichier());
+            vue.put("nombrePages", rapport.getNombrePages());
+            vue.put("nombre_pages", rapport.getNombrePages());
+            vue.put("statut", rapport.getStatut());
+            vue.put("dateGeneration", rapport.getDateGeneration());
+            vue.put("date_generation", rapport.getDateGeneration());
+
+            Secteur secteur = parId.get(rapport.getSecteurId());
+            vue.put("secteur", secteur == null ? null : secteur.getNom());
+            vue.put("secteur_en", secteur == null ? null : secteur.getNomEn());
+            return vue;
+        }).toList();
     }
 
     /**
@@ -324,6 +369,10 @@ public class AdminController {
         vue.put("secteurId", rapport.getSecteurId());
         vue.put("secteur", secteurs.findById(rapport.getSecteurId())
                 .map(Secteur::getNom).orElse(rapport.getTitre()));
+        // Le nom anglais suit, pour que l'ecran d'edition l'affiche dans la
+        // langue de l'interface (migration 009).
+        vue.put("secteur_en", secteurs.findById(rapport.getSecteurId())
+                .map(Secteur::getNomEn).orElse(null));
         vue.put("titre", rapport.getTitre());
         vue.put("cheminFichier", rapport.getCheminFichier());
         vue.put("tailleFichier", rapport.getTailleFichier());
@@ -399,7 +448,7 @@ public class AdminController {
         reponse.put("totaux", consolider(parSecteur));
         reponse.put("chiffreAffaires", ventes.chiffreAffairesReel());
         reponse.put("devise", properties.getDevise());
-        reponse.put("rapportsRecents", rapports.findTop50ByOrderByDateGenerationDesc());
+        reponse.put("rapportsRecents", avecSecteur(rapports.findTop50ByOrderByDateGenerationDesc()));
         return reponse;
     }
 

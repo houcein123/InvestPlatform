@@ -15,6 +15,9 @@ import { TableWrapper, Tbody, Td, Th, Thead, Tr } from '@/components/ui/table';
 import { COULEUR_AXE, COULEUR_GRILLE, couleurSerie } from '@/components/charts/palette';
 import { InfobulleGraphique } from '@/components/charts/InfobulleGraphique';
 import { IconeSecteur } from '@/features/catalogue/IconeSecteur';
+import { useTraduction } from '@/i18n';
+import { useLibelleSecteur } from '@/i18n/donnees';
+import type { Dictionnaire } from '@/i18n/fr';
 import { api } from '@/lib/api';
 import { cles } from '@/lib/queryClient';
 import { cn, formatMontant, formatNombre } from '@/lib/utils';
@@ -39,30 +42,42 @@ type CleIndicateur = keyof Pick<SecteurCompare,
   'exportations_mdt' | 'nombre_entreprises' | 'investissements_ide_mdt' |
   'part_marche_regional_pct'>;
 
-const INDICATEURS: { cle: CleIndicateur; libelle: string; unite: string; court: string }[] = [
-  { cle: 'contribution_pib_pct', libelle: 'Contribution au PIB', unite: '%', court: 'PIB' },
-  { cle: 'croissance_annuelle_pct', libelle: 'Croissance annuelle', unite: '%', court: 'Croissance' },
-  { cle: 'nombre_emplois', libelle: 'Emplois générés', unite: 'postes', court: 'Emplois' },
-  { cle: 'exportations_mdt', libelle: 'Exportations', unite: 'MDT', court: 'Export' },
-  { cle: 'nombre_entreprises', libelle: 'Entreprises actives', unite: 'unités', court: 'Entreprises' },
-  { cle: 'investissements_ide_mdt', libelle: 'Investissements directs étrangers', unite: 'MDT', court: 'IDE' },
-  { cle: 'part_marche_regional_pct', libelle: 'Part de marché régionale', unite: '%', court: 'Part rég.' },
-];
+/**
+ * Les sept indicateurs comparés, dans la langue active.
+ *
+ * `%` et `MDT` ne sont pas traduits : ce sont des symboles d'unité, identiques
+ * dans les deux langues. Seules les unités écrites en toutes lettres — postes,
+ * unités — passent par le dictionnaire.
+ */
+function indicateurs(t: Dictionnaire): { cle: CleIndicateur; libelle: string; unite: string; court: string }[] {
+  return [
+    { cle: 'contribution_pib_pct', libelle: t.analyse.indicateurPib, unite: '%', court: t.analyse.indicateurPibCourt },
+    { cle: 'croissance_annuelle_pct', libelle: t.analyse.indicateurCroissance, unite: '%', court: t.analyse.indicateurCroissanceCourt },
+    { cle: 'nombre_emplois', libelle: t.analyse.indicateurEmplois, unite: t.analyse.indicateurEmploisUnite, court: t.analyse.indicateurEmploisCourt },
+    { cle: 'exportations_mdt', libelle: t.analyse.indicateurExportations, unite: 'MDT', court: t.analyse.indicateurExportationsCourt },
+    { cle: 'nombre_entreprises', libelle: t.analyse.indicateurEntreprises, unite: t.analyse.indicateurEntreprisesUnite, court: t.analyse.indicateurEntreprisesCourt },
+    { cle: 'investissements_ide_mdt', libelle: t.analyse.indicateurIde, unite: 'MDT', court: t.analyse.indicateurIdeCourt },
+    { cle: 'part_marche_regional_pct', libelle: t.analyse.indicateurPartMarche, unite: '%', court: t.analyse.indicateurPartMarcheCourt },
+  ];
+}
 
 export default function Comparateur() {
+  const { t } = useTraduction();
+  const libelle = useLibelleSecteur();
   const [indicateur, setIndicateur] = useState<CleIndicateur>('croissance_annuelle_pct');
+  const listeIndicateurs = indicateurs(t);
 
   const donnees = useQuery({ queryKey: cles.analyseSecteurs, queryFn: api.analyseSecteurs });
   const secteurs = ((donnees.data as { secteurs?: SecteurCompare[] } | undefined)?.secteurs ?? []);
 
-  const actif = INDICATEURS.find((i) => i.cle === indicateur)!;
+  const actif = listeIndicateurs.find((i) => i.cle === indicateur)!;
 
   const classement = useMemo(
     () => [...secteurs]
       .filter((s) => s[indicateur] != null)
       .sort((a, b) => Number(b[indicateur]) - Number(a[indicateur]))
-      .map((s) => ({ nom: s.nom, valeur: Number(s[indicateur]) })),
-    [secteurs, indicateur],
+      .map((s) => ({ nom: libelle.nom(s), valeur: Number(s[indicateur]) })),
+    [secteurs, indicateur, libelle],
   );
 
   /**
@@ -76,29 +91,27 @@ export default function Comparateur() {
    */
   const radar = useMemo(() => {
     if (secteurs.length === 0) return [];
-    return INDICATEURS.map(({ cle, court }) => {
+    return listeIndicateurs.map(({ cle, court }) => {
       const maximum = Math.max(...secteurs.map((s) => Number(s[cle] ?? 0)), 1);
       const point: Record<string, string | number> = { indicateur: court };
       secteurs.forEach((s) => {
-        point[s.nom] = Math.round((Number(s[cle] ?? 0) / maximum) * 100);
+        point[libelle.nom(s)] = Math.round((Number(s[cle] ?? 0) / maximum) * 100);
       });
       return point;
     });
-  }, [secteurs]);
+  }, [secteurs, listeIndicateurs, libelle]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <header>
         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(var(--primary))]">
-          Analyse comparative
+          {t.analyse.surtitre}
         </p>
         <h1 className="font-display text-3xl font-extrabold leading-tight">
-          Comparateur de secteurs
+          {t.analyse.titre}
         </h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[hsl(var(--muted))]">
-          Les six secteurs face à face, sur sept indicateurs agrégés. Cet écran est
-          gratuit et sans compte : il sert à situer un secteur avant de commander
-          l&apos;analyse détaillée.
+          {t.analyse.accroche}
         </p>
       </header>
 
@@ -111,14 +124,14 @@ export default function Comparateur() {
         <>
           <Card>
             <CardHeader>
-              <CardTitle>Classement par indicateur</CardTitle>
+              <CardTitle>{t.analyse.classementTitre}</CardTitle>
               <CardDescription>
-                Choisissez l&apos;indicateur qui compte pour votre projet.
+                {t.analyse.classementDescription}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="flex flex-wrap gap-1.5">
-                {INDICATEURS.map(({ cle, libelle }) => (
+                {listeIndicateurs.map(({ cle, libelle }) => (
                   <button
                     key={cle}
                     type="button"
@@ -154,11 +167,9 @@ export default function Comparateur() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Profil comparé</CardTitle>
+              <CardTitle>{t.analyse.profilTitre}</CardTitle>
               <CardDescription>
-                Chaque axe est ramené à 100 pour le secteur le mieux placé. Le radar
-                montre des positions relatives, pas des valeurs absolues — celles-ci
-                figurent dans le tableau ci-dessous.
+                {t.analyse.profilDescription}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -171,8 +182,8 @@ export default function Comparateur() {
                   {secteurs.map((secteur, index) => (
                     <Radar
                       key={secteur.id}
-                      name={secteur.nom}
-                      dataKey={secteur.nom}
+                      name={libelle.nom(secteur)}
+                      dataKey={libelle.nom(secteur)}
                       stroke={couleurSerie(index)}
                       fill={couleurSerie(index)}
                       fillOpacity={0.12}
@@ -188,7 +199,7 @@ export default function Comparateur() {
                   <span key={secteur.id} className="flex items-center gap-2 text-xs">
                     <span className="size-2.5 rounded-full"
                       style={{ backgroundColor: couleurSerie(index) }} aria-hidden />
-                    {secteur.nom}
+                    {libelle.nom(secteur)}
                   </span>
                 ))}
               </div>
@@ -197,13 +208,13 @@ export default function Comparateur() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Valeurs détaillées</CardTitle>
+              <CardTitle>{t.analyse.valeursTitre}</CardTitle>
             </CardHeader>
             <CardContent className="px-0 sm:px-0">
               <TableWrapper className="px-2 sm:px-3">
                 <Thead>
-                  <Th>Secteur</Th>
-                  {INDICATEURS.map(({ cle, court }) => <Th key={cle} numerique>{court}</Th>)}
+                  <Th>{t.analyse.colonneSecteur}</Th>
+                  {listeIndicateurs.map(({ cle, court }) => <Th key={cle} numerique>{court}</Th>)}
                   <Th />
                 </Thead>
                 <Tbody>
@@ -213,14 +224,14 @@ export default function Comparateur() {
                         <div className="flex items-center gap-3">
                           <IconeSecteur slug={secteur.slug} taille="sm" />
                           <div className="min-w-0">
-                            <p className="font-medium leading-tight">{secteur.nom}</p>
+                            <p className="font-medium leading-tight">{libelle.nom(secteur)}</p>
                             <p className="text-xs text-[hsl(var(--muted))]">
                               {formatMontant(secteur.prix_rapport)}
                             </p>
                           </div>
                         </div>
                       </Td>
-                      {INDICATEURS.map(({ cle }) => (
+                      {listeIndicateurs.map(({ cle }) => (
                         <Td key={cle} numerique>
                           {secteur[cle] == null
                             ? <span className="text-[hsl(var(--muted))]">—</span>
@@ -231,7 +242,7 @@ export default function Comparateur() {
                         <div className="flex justify-end">
                           <Button asChild size="sm" variant="outline">
                             <Link to={`/paiement/${secteur.id}`}>
-                              Rapport <ArrowRight />
+                              {t.analyse.boutonRapport} <ArrowRight />
                             </Link>
                           </Button>
                         </div>
@@ -245,9 +256,8 @@ export default function Comparateur() {
 
           <p className="flex items-start gap-2 text-xs leading-relaxed text-[hsl(var(--muted))]">
             <Info className="mt-0.5 size-3.5 shrink-0" />
-            Ces indicateurs agrégés situent un ordre de grandeur. Les séries annuelles
-            détaillées, leurs sources et les perspectives 2025-2028 figurent dans le
-            rapport sectoriel. <Badge variant="neutre" className="ml-1">Données non contractuelles</Badge>
+            {t.analyse.noteAgregats}{' '}
+            <Badge variant="neutre" className="ml-1">{t.analyse.nonContractuel}</Badge>
           </p>
         </>
       )}

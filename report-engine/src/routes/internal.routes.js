@@ -21,11 +21,12 @@ const { asyncHandler, HttpError } = require("../middleware/errorHandler");
 const router = express.Router();
 
 /** Lance la génération en tâche de fond et tient le job à jour. */
-function lancerGeneration(jobId, sectorId, { achatId, utilisateurId }) {
+function lancerGeneration(jobId, sectorId, { achatId, utilisateurId, langue }) {
     reportService
         .generateFullReport(sectorId, {
             achatId,
             utilisateurId,
+            langue,
             onProgress: (progression, etape) => jobStore.updateJob(jobId, { progression, etape }),
         })
         .then((resultat) => {
@@ -41,6 +42,10 @@ function lancerGeneration(jobId, sectorId, { achatId, utilisateurId }) {
                 filename: resultat.pdf.filename,
                 nombrePages: resultat.pdf.nombrePages,
                 sectionsManquantes: resultat.sectionsManquantes,
+                // Remonté jusqu'à l'écran : une section signalée doit être
+                // relue par un humain avant diffusion, pas rester dans un
+                // journal serveur que personne n'ouvre.
+                controleQualite: resultat.controleQualite,
             });
         })
         .catch((err) => {
@@ -66,7 +71,7 @@ router.get("/health", (req, res) => {
  * service ne relit pas l'achat, il fabrique.
  */
 router.post("/report/generate", asyncHandler(async (req, res) => {
-    const { sectorId, achatId, utilisateurId } = req.body;
+    const { sectorId, achatId, utilisateurId, langue } = req.body;
     if (!sectorId) throw new HttpError(400, "sectorId est obligatoire");
 
     // Un achat déjà en cours de génération ne relance rien : on renvoie le job
@@ -86,7 +91,14 @@ router.post("/report/generate", asyncHandler(async (req, res) => {
     }
 
     const jobId = jobStore.createJob(sectorId, achatId ?? null);
-    lancerGeneration(jobId, sectorId, { achatId: achatId ?? null, utilisateurId: utilisateurId ?? null });
+    lancerGeneration(jobId, sectorId, {
+        achatId: achatId ?? null,
+        utilisateurId: utilisateurId ?? null,
+        // La langue est choisie a la commande et voyage avec elle. Une
+        // valeur absente vaut francais, ce qui garde compatibles les
+        // appels d'une version anterieure du backend.
+        langue: langue ?? undefined,
+    });
 
     res.status(202).json({ success: true, jobId, dureeEstimeeSec: 40 });
 }));
@@ -105,7 +117,7 @@ router.get("/report/status/:jobId", (req, res) => {
  * rédaction est épuisé.
  */
 router.get("/report/preview/:sectorId", asyncHandler(async (req, res) => {
-    const apercu = await reportService.generatePreview(req.params.sectorId);
+    const apercu = await reportService.generatePreview(req.params.sectorId, req.query.langue);
     if (!apercu) throw new HttpError(404, "Secteur introuvable");
 
     res.type("application/pdf");

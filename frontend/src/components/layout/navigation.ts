@@ -3,6 +3,8 @@ import {
   Settings, User, Users, type LucideIcon,
 } from 'lucide-react';
 
+import type { Dictionnaire } from '@/i18n/fr';
+
 export interface Lien {
   to: string;
   libelle: string;
@@ -27,79 +29,86 @@ export interface Groupe {
  * La barre horizontale et le tiroir mobile la lisent tous les deux : deux
  * listes séparées finiraient par diverger, et un lien n'existerait plus que
  * sur l'un des deux affichages.
+ *
+ * C'est une FONCTION du dictionnaire, plus une constante : les libellés
+ * changent avec la langue. Figés au chargement du module, ils resteraient dans
+ * la langue du premier rendu, et basculer en anglais laisserait un menu
+ * français au-dessus d'une page traduite.
  */
-export const NAVIGATION: Groupe[] = [
-  {
-    cle: 'catalogue',
-    libelle: 'Catalogue',
-    Icone: LayoutGrid,
-    acces: 'public',
-    liens: [
-      { to: '/', libelle: 'Catalogue', Icone: LayoutGrid, exact: true,
-        detail: 'Les six secteurs et leurs rapports' },
-    ],
-  },
-  {
-    cle: 'client',
-    libelle: 'Mes rapports',
-    Icone: FileText,
-    acces: 'connecte',
-    liens: [
-      { to: '/mes-rapports', libelle: 'Mes rapports', Icone: FileText,
-        detail: 'Commandes réglées et documents livrés' },
-    ],
-  },
-  {
-    cle: 'analyse',
-    libelle: 'Analyse',
-    Icone: BarChart3,
-    // Reserve aux comptes : sur l'ecran de connexion et pour un visiteur non
-    // identifie, la seule action attendue est de se connecter ou de creer un
-    // compte. Le comparateur et le glossaire n'ont d'interet qu'une fois dans
-    // l'espace, et les proposer avant detourne d'un formulaire commence.
-    acces: 'connecte',
-    liens: [
-      { to: '/analyse/secteurs', libelle: 'Comparateur de secteurs', Icone: LayoutGrid,
-        detail: 'Les six secteurs face à face, sur sept indicateurs' },
-      { to: '/analyse/regional', libelle: 'Comparatif régional', Icone: Globe2,
-        detail: 'Tunisie, Maroc et Égypte sur données officielles' },
-      { to: '/ressources/glossaire', libelle: 'Glossaire', Icone: BookOpen,
-        detail: "Termes de l'investissement en Tunisie" },
-    ],
-  },
-  {
-    cle: 'admin',
-    libelle: 'Administration',
-    Icone: BarChart3,
-    acces: 'admin',
-    liens: [
-      { to: '/admin', libelle: 'Pilotage', Icone: BarChart3, exact: true,
-        detail: 'Ventes, revenus et rapports produits' },
-      { to: '/admin/secteurs', libelle: 'Secteurs', Icone: Building2,
-        detail: 'Tarifs, visibilité et données sectorielles' },
-      { to: '/admin/rapports', libelle: 'Rapports', Icone: FileText,
-        detail: 'Documents générés et corrections' },
-      { to: '/admin/comptes', libelle: 'Comptes', Icone: Users,
-        detail: 'Rôles et accès des utilisateurs' },
-    ],
-  },
-  {
-    cle: 'compte',
-    libelle: 'Compte',
-    Icone: User,
-    acces: 'connecte',
-    liens: [
-      { to: '/profil', libelle: 'Profil', Icone: User,
-        detail: 'Informations personnelles et mot de passe' },
-      { to: '/parametres', libelle: 'Paramètres', Icone: Settings,
-        detail: "Thème, préférences et état des services" },
-    ],
-  },
-];
+export function construireNavigation(t: Dictionnaire): Groupe[] {
+  return [
+    {
+      cle: 'catalogue',
+      libelle: t.nav.catalogue,
+      Icone: LayoutGrid,
+      acces: 'public',
+      liens: [
+        { to: '/', libelle: t.nav.catalogue, Icone: LayoutGrid, exact: true,
+          detail: t.nav.catalogueDetail },
+      ],
+    },
+    {
+      cle: 'client',
+      libelle: t.nav.mesRapports,
+      Icone: FileText,
+      acces: 'connecte',
+      liens: [
+        { to: '/mes-rapports', libelle: t.nav.mesRapports, Icone: FileText,
+          detail: t.nav.mesRapportsDetail },
+      ],
+    },
+    {
+      cle: 'analyse',
+      libelle: t.nav.analyse,
+      Icone: BarChart3,
+      // Reserve aux comptes : sur l'ecran de connexion et pour un visiteur non
+      // identifie, la seule action attendue est de se connecter ou de creer un
+      // compte. Le comparateur et le glossaire n'ont d'interet qu'une fois dans
+      // l'espace, et les proposer avant detourne d'un formulaire commence.
+      acces: 'connecte',
+      liens: [
+        { to: '/analyse/secteurs', libelle: t.nav.comparateur, Icone: LayoutGrid,
+          detail: t.nav.comparateurDetail },
+        { to: '/analyse/regional', libelle: t.nav.regional, Icone: Globe2,
+          detail: t.nav.regionalDetail },
+        { to: '/ressources/glossaire', libelle: t.nav.glossaire, Icone: BookOpen,
+          detail: t.nav.glossaireDetail },
+      ],
+    },
+    {
+      cle: 'admin',
+      libelle: t.nav.administration,
+      Icone: BarChart3,
+      acces: 'admin',
+      liens: [
+        { to: '/admin', libelle: t.nav.pilotage, Icone: BarChart3, exact: true,
+          detail: t.nav.pilotageDetail },
+        { to: '/admin/secteurs', libelle: t.nav.secteurs, Icone: Building2,
+          detail: t.nav.secteursDetail },
+        { to: '/admin/rapports', libelle: t.nav.rapports, Icone: FileText,
+          detail: t.nav.rapportsDetail },
+        { to: '/admin/comptes', libelle: t.nav.comptes, Icone: Users,
+          detail: t.nav.comptesDetail },
+      ],
+    },
+    {
+      cle: 'compte',
+      libelle: t.nav.compte,
+      Icone: User,
+      acces: 'connecte',
+      liens: [
+        { to: '/profil', libelle: t.nav.profil, Icone: User,
+          detail: t.nav.profilDetail },
+        { to: '/parametres', libelle: t.nav.parametres, Icone: Settings,
+          detail: t.nav.parametresDetail },
+      ],
+    },
+  ];
+}
 
 /** Groupes visibles pour l'état de session courant. */
-export function groupesVisibles(estConnecte: boolean, estAdmin: boolean): Groupe[] {
-  return NAVIGATION.filter((groupe) => {
+export function groupesVisibles(t: Dictionnaire, estConnecte: boolean, estAdmin: boolean): Groupe[] {
+  return construireNavigation(t).filter((groupe) => {
     if (groupe.acces === 'public') return true;
     if (groupe.acces === 'admin') return estAdmin;
     return estConnecte;

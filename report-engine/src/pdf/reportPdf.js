@@ -29,7 +29,8 @@ const fs = require("fs");
 const path = require("path");
 
 const { config } = require("../config/env");
-const { SECTION_CATALOG, SECTION_TITLES } = require("./sections");
+const { SECTION_CATALOG, catalogueSections, titresSections } = require("./sections");
+const { L, champ, langueDe, attacherLibelles, normaliserLangue } = require("./libelles");
 const { LIBELLES_METHODE } = require("../services/projectionService");
 const {
     COLORS,
@@ -44,6 +45,7 @@ const {
     contentWidth,
     tronquer,
     ensureSpace,
+    HAUTEUR_LIGNE,
     withoutBottomMargin,
     drawHeaderFooter,
     measureBadgeWidth,
@@ -79,10 +81,27 @@ function renderParagraph(doc, text) {
     doc.x = startX;
 }
 
+/**
+ * Puce, jamais separee de sa premiere ligne.
+ *
+ * Le rond est dessine a la position COURANTE, puis le texte : si le texte
+ * bascule a la page suivante, le rond reste seul en bas de la page precedente
+ * et le lecteur trouve, en haut de page, une phrase qui commence dans le vide.
+ *
+ * On reserve donc la place du rond et d'au moins deux lignes avant de dessiner
+ * quoi que ce soit. Deux lignes, pas la hauteur totale : une puce de dix lignes
+ * a parfaitement le droit de se poursuivre page suivante, ce qui compte est
+ * qu'elle ne DEBUTE pas dans les derniers millimetres.
+ */
 function renderBullet(doc, text) {
     const startX = doc.page.margins.left;
     const width = contentWidth(doc);
     const indent = 15;
+
+    ensureSpace(doc, HAUTEUR_LIGNE * 2);
+
+    // `y` est relu APRES ensureSpace : un saut de page vient de le deplacer, et
+    // l'ancienne valeur aurait dessine le rond hors de la zone de contenu.
     const y = doc.y;
     doc.circle(startX + 3, y + 5.5, 1.7).fill(COLORS.primary);
     doc.font("Helvetica").fontSize(10.3).fillColor(COLORS.text)
@@ -101,7 +120,9 @@ function renderRichText(doc, text) {
         const paragraph = buffer.join(" ").trim();
         buffer = [];
         if (paragraph) {
-            ensureSpace(doc, 26);
+            // Deux lignes minimum : un paragraphe qui commence par une ligne
+            // seule en bas de page se lit comme un fragment egare.
+            ensureSpace(doc, HAUTEUR_LIGNE * 2);
             renderParagraph(doc, paragraph);
         }
     };
@@ -116,7 +137,8 @@ function renderRichText(doc, text) {
 
         if (bullet) {
             flush();
-            ensureSpace(doc, 20);
+            // La reservation est faite dans renderBullet, qui connait la
+            // hauteur du rond : la dupliquer ici ferait sauter deux pages.
             renderBullet(doc, bullet[1]);
             return;
         }
@@ -138,7 +160,7 @@ function renderRichText(doc, text) {
 
 function renderNarrativeSection(doc, text) {
     if (!text || !text.trim()) {
-        emptyState(doc, "Section non disponible dans cette édition du rapport.");
+        emptyState(doc, L(doc).sectionIndisponible);
         return;
     }
     renderRichText(doc, text);
@@ -148,16 +170,21 @@ function renderNarrativeSection(doc, text) {
 // 2. CARTES KPI — table "chiffres_cles"
 // ============================================================================
 
-const KPI_DEFS = [
-    { key: "contribution_pib_pct", label: "Contribution au PIB", fmt: (v) => formatPercent(v) },
-    { key: "croissance_annuelle_pct", label: "Croissance annuelle", fmt: (v) => formatPercent(v, 1, true),
-      color: (v) => (v < 0 ? COLORS.red : COLORS.green) },
-    { key: "nombre_emplois", label: "Emplois générés", fmt: (v) => formatNumber(v) },
-    { key: "exportations_mdt", label: "Exportations", fmt: (v) => formatMDT(v) },
-    { key: "nombre_entreprises", label: "Entreprises actives", fmt: (v) => formatNumber(v) },
-    { key: "investissements_ide_mdt", label: "Investissements IDE", fmt: (v) => formatMDT(v) },
-    { key: "part_marche_regional_pct", label: "Part marché régional", fmt: (v) => formatPercent(v) },
-];
+/** Les sept cartes d'indicateurs, intitulés dans la langue du document. */
+function kpiDefs(doc) {
+    const l = L(doc);
+    const lg = langueDe(doc);
+    return [
+        { key: "contribution_pib_pct", label: l.kpiPib, fmt: (v) => formatPercent(v, 1, false, lg) },
+        { key: "croissance_annuelle_pct", label: l.kpiCroissance, fmt: (v) => formatPercent(v, 1, true, lg),
+          color: (v) => (v < 0 ? COLORS.red : COLORS.green) },
+        { key: "nombre_emplois", label: l.kpiEmplois, fmt: (v) => formatNumber(v, 0, lg) },
+        { key: "exportations_mdt", label: l.kpiExportations, fmt: (v) => formatMDT(v, lg) },
+        { key: "nombre_entreprises", label: l.kpiEntreprises, fmt: (v) => formatNumber(v, 0, lg) },
+        { key: "investissements_ide_mdt", label: l.kpiIde, fmt: (v) => formatMDT(v, lg) },
+        { key: "part_marche_regional_pct", label: l.kpiPartMarche, fmt: (v) => formatPercent(v, 1, false, lg) },
+    ];
+}
 
 function drawKPICard(doc, { x, y, w, h, label, value, valueColor }) {
     doc.roundedRect(x, y, w, h, 7).fill(COLORS.primaryBg);
@@ -188,7 +215,8 @@ function drawKPIGrid(doc, chiffresCles) {
     const rowGap = 12;
 
     let rowY = doc.y;
-    KPI_DEFS.forEach((def, i) => {
+    const definitions = kpiDefs(doc);
+    definitions.forEach((def, i) => {
         const col = i % cols;
         if (col === 0) {
             ensureSpace(doc, cardH + rowGap);
@@ -201,7 +229,7 @@ function drawKPIGrid(doc, chiffresCles) {
             x: startX + col * (cardW + gap), y: rowY, w: cardW, h: cardH,
             label: def.label, value, valueColor,
         });
-        if (col === cols - 1 || i === KPI_DEFS.length - 1) {
+        if (col === cols - 1 || i === definitions.length - 1) {
             doc.y = rowY + cardH + rowGap;
             doc.x = startX;
         }
@@ -306,7 +334,7 @@ function drawIndicatorChart(doc, { x, y, width, height, title, unit, years, valu
         doc.roundedRect(bx, by, barW, h, 1.5).fill(isProjection && isProjection[i] ? COLORS.primaryLight : COLORS.primary);
         if (i === n - 1) {
             doc.font("Helvetica-Bold").fontSize(7).fillColor(COLORS.primaryDark)
-                .text(formatNumber(v), bx - 14, by - 10, { width: barW + 28, align: "center", lineBreak: false });
+                .text(formatNumber(v, 0, langueDe(doc)), bx - 14, by - 10, { width: barW + 28, align: "center", lineBreak: false });
         }
     });
 
@@ -345,7 +373,7 @@ function drawTrajectoires(doc, rows) {
     const cardH = 140;
 
     ensureSpace(doc, cardH + 24);
-    drawSubHeading(doc, "Trajectoires");
+    drawSubHeading(doc, L(doc).trajectoires);
 
     const rowY = doc.y;
     lignes.forEach((row, i) => {
@@ -358,8 +386,8 @@ function drawTrajectoires(doc, rows) {
             y: rowY + 10,
             largeur: cardW - 24,
             hauteur: cardH - 20,
-            titre: row.indicateur,
-            unite: row.unite,
+            titre: champ(doc, row, "indicateur"),
+            unite: champ(doc, row, "unite"),
             annees: serie.years,
             valeurs: serie.values,
             estProjection: serie.isProjection,
@@ -391,7 +419,8 @@ function drawStatisticsCharts(doc, rows) {
         const { years, values, isProjection } = extractSeries(row);
         drawIndicatorChart(doc, {
             x: startX + col * (cardW + gap), y: rowY, width: cardW, height: cardH,
-            title: row.indicateur || "Indicateur", unit: row.unite, years, values, isProjection,
+            title: champ(doc, row, "indicateur") || L(doc).indicateur,
+            unit: champ(doc, row, "unite"), years, values, isProjection,
         });
         if (col === cols - 1 || i === rows.length - 1) {
             doc.y = rowY + cardH + rowGap;
@@ -426,8 +455,8 @@ function drawStatisticsTable(doc, rows) {
     const width = contentWidth(doc);
 
     const colonnes = [
-        { label: "INDICATEUR", largeur: 0.52 },
-        { label: "UNITÉ", largeur: 0.15 },
+        { label: L(doc).colonneIndicateur, largeur: 0.52 },
+        { label: L(doc).colonneUnite, largeur: 0.15 },
         { label: "DERNIÈRE VALEUR", largeur: 0.17, align: "right" },
         { label: "EST. 2028", largeur: 0.16, align: "right" },
     ];
@@ -464,16 +493,16 @@ function drawStatisticsTable(doc, rows) {
         const estimation = row.projection_2028;
 
         const cellules = [
-            { texte: row.indicateur || "-", couleur: COLORS.text },
-            { texte: row.unite || "-", couleur: COLORS.textMuted },
+            { texte: champ(doc, row, "indicateur") || "-", couleur: COLORS.text },
+            { texte: champ(doc, row, "unite") || "-", couleur: COLORS.textMuted },
             {
-                texte: derniere ? `${formatNumber(derniere.valeur)} (${derniere.annee})` : "N/D",
+                texte: derniere ? `${formatNumber(derniere.valeur, 0, langueDe(doc))} (${derniere.annee})` : "N/D",
                 couleur: COLORS.text, gras: true, align: "right",
             },
             {
                 // L'estimation est écrite dans la couleur des projections :
                 // impossible de la confondre avec une valeur publiée.
-                texte: estimation !== null && estimation !== undefined ? formatNumber(estimation) : "—",
+                texte: estimation !== null && estimation !== undefined ? formatNumber(estimation, 0, langueDe(doc)) : "—",
                 couleur: COLORS.primary, align: "right",
             },
         ];
@@ -510,17 +539,17 @@ function drawProjectionLegend(doc) {
 
     doc.roundedRect(startX, y + 2, 9, 9, 1.5).fill(COLORS.primary);
     doc.font("Helvetica").fontSize(8.5).fillColor(COLORS.textMuted)
-        .text("Valeur observée (source officielle)", startX + 15, y + 2, { lineBreak: false });
+        .text(L(doc).valeurObservee, startX + 15, y + 2, { lineBreak: false });
 
-    const decalage = startX + 15 + doc.widthOfString("Valeur observée (source officielle)") + 22;
+    const decalage = startX + 15 + doc.widthOfString(L(doc).valeurObservee) + 22;
     doc.roundedRect(decalage, y + 2, 9, 9, 1.5).fill(COLORS.primaryLight);
     doc.font("Helvetica").fontSize(8.5).fillColor(COLORS.textMuted)
-        .text("Estimation calculée", decalage + 15, y + 2, { lineBreak: false });
+        .text(L(doc).estimationCalculee, decalage + 15, y + 2, { lineBreak: false });
 
     doc.y = y + 20;
     doc.x = startX;
     doc.font("Helvetica-Oblique").fontSize(8).fillColor(COLORS.textLight)
-        .text("Les estimations prolongent la tendance observée ; leur méthode de calcul est détaillée en section 12.",
+        .text(L(doc).noteEstimations,
             startX, doc.y, { width });
     doc.moveDown(0.5);
     doc.x = startX;
@@ -538,13 +567,13 @@ function renderChiffresClesSection(doc, report) {
 
     if (withData.length === 0) {
         if (report.chiffresCles) {
-            emptyState(doc, "Aucune série statistique disponible pour ce secteur pour le moment.");
+            emptyState(doc, L(doc).aucuneSerie);
         }
         return;
     }
 
     doc.moveDown(0.3);
-    drawSubHeading(doc, "Évolution des indicateurs sectoriels");
+    drawSubHeading(doc, L(doc).evolutionIndicateurs);
 
     // Les séries qui portent une projection sont mises en avant : ce sont
     // celles qui éclairent le mieux une décision d'investissement.
@@ -592,7 +621,7 @@ function drawTable(doc, { columns, rows, emptyMessage }) {
     const width = contentWidth(doc);
 
     if (!rows || rows.length === 0) {
-        emptyState(doc, emptyMessage || "Aucune donnée disponible pour ce tableau.");
+        emptyState(doc, emptyMessage || L(doc).aucuneDonneeTableau);
         return;
     }
 
@@ -654,16 +683,16 @@ function drawCardShell(doc, height) {
 function renderActeursSection(doc, acteurs) {
     drawActeursGraphiques(doc, acteurs);
     drawTable(doc, {
-        emptyMessage: "Aucun acteur principal renseigné pour ce secteur pour le moment.",
+        emptyMessage: L(doc).aucunActeur,
         rows: acteurs,
         columns: [
             { label: "Nom", width: 0.30, render: (r) => r.nom || "-", bold: true },
-            { label: "Type", width: 0.17, render: (r) => humanizeType(r.type) },
-            { label: "Rôle", width: 0.26, render: (r) => r.role || "-" },
+            { label: L(doc).colonneType, width: 0.17, render: (r) => humanizeType(r.type, doc) },
+            { label: L(doc).colonneRole, width: 0.26, render: (r) => champ(doc, r, "role") || "-" },
             { label: "CA (MDT)", width: 0.12, align: "right",
-              render: (r) => (r.chiffre_affaires != null ? formatNumber(r.chiffre_affaires, 1) : "N/D") },
+              render: (r) => (r.chiffre_affaires != null ? formatNumber(r.chiffre_affaires, 1, langueDe(doc)) : "N/D") },
             { label: "Employés", width: 0.15, align: "right",
-              render: (r) => (r.nombre_employes != null ? formatNumber(r.nombre_employes) : "N/D") },
+              render: (r) => (r.nombre_employes != null ? formatNumber(r.nombre_employes, 0, langueDe(doc)) : "N/D") },
         ],
     });
 
@@ -676,7 +705,7 @@ function renderActeursSection(doc, acteurs) {
         doc.moveDown(0.15);
         doc.x = startX;
         doc.font("Helvetica").fontSize(7.8).fillColor(COLORS.textLight)
-            .text("SITES WEB : " + withSite.map((a) => `${a.nom} — ${a.site_web.replace(/^https?:\/\//, "")}`).join("   ·   "),
+            .text(L(doc).sitesWeb + withSite.map((a) => `${a.nom} — ${a.site_web.replace(/^https?:\/\//, "")}`).join("   ·   "),
                 startX, doc.y, { width, lineBreak: true });
         doc.moveDown(0.4);
         doc.x = startX;
@@ -691,11 +720,11 @@ function drawCadreCard(doc, item) {
     const { startX, width, top } = drawCardShell(doc, baseH + detailH);
 
     doc.font("Helvetica-Bold").fontSize(11.5).fillColor(COLORS.text)
-        .text(tronquer(doc, item.titre || "Texte réglementaire", width - padX * 2 - 200),
+        .text(tronquer(doc, champ(doc, item, "titre") || L(doc).texteReglementaire, width - padX * 2 - 200),
             startX + padX, top + 12, { width: width - padX * 2 - 200 });
 
     let bx = startX + width - padX;
-    const statusLabel = item.est_en_vigueur === false ? "Historique" : "En vigueur";
+    const statusLabel = item.est_en_vigueur === false ? L(doc).historique : L(doc).enVigueur;
     const statusColor = item.est_en_vigueur === false ? COLORS.textMuted : COLORS.green;
     const statusBg = item.est_en_vigueur === false ? COLORS.surface : "#ecfdf5";
     const w0 = measureBadgeWidth(doc, statusLabel);
@@ -719,13 +748,13 @@ function drawCadreCard(doc, item) {
         const dy = top + baseH;
         if (item.avantages) {
             doc.font("Helvetica-Bold").fontSize(8).fillColor(COLORS.green)
-                .text("AVANTAGES", startX + padX, dy, { width: halfW, lineBreak: false });
+                .text(L(doc).avantages, startX + padX, dy, { width: halfW, lineBreak: false });
             doc.font("Helvetica").fontSize(8.5).fillColor(COLORS.text)
                 .text(item.avantages, startX + padX, dy + 11, { width: halfW, height: 20, ellipsis: true });
         }
         if (item.obligations) {
             doc.font("Helvetica-Bold").fontSize(8).fillColor(COLORS.gold)
-                .text("OBLIGATIONS", startX + padX + halfW + 20, dy, { width: halfW, lineBreak: false });
+                .text(L(doc).obligations, startX + padX + halfW + 20, dy, { width: halfW, lineBreak: false });
             doc.font("Helvetica").fontSize(8.5).fillColor(COLORS.text)
                 .text(item.obligations, startX + padX + halfW + 20, dy + 11, { width: halfW, height: 20, ellipsis: true });
         }
@@ -742,7 +771,7 @@ function drawZoneCard(doc, zone) {
     }
 
     doc.font("Helvetica-Bold").fontSize(11.5).fillColor(COLORS.text)
-        .text(tronquer(doc, zone.nom || "Zone", width - padX * 2 - 150),
+        .text(tronquer(doc, zone.nom || L(doc).zoneParDefaut, width - padX * 2 - 150),
             startX + padX, top + 12, { width: width - padX * 2 - 150 });
 
     let bx = startX + width - padX;
@@ -761,7 +790,8 @@ function drawZoneCard(doc, zone) {
             .text(metaParts.join("  ·  "), startX + padX, top + 30, { width: width - padX * 2, lineBreak: false });
     }
 
-    const descParts = [zone.description, zone.avantages].filter(Boolean).join(" — ");
+    const descParts = [champ(doc, zone, "description"), champ(doc, zone, "avantages")]
+        .filter(Boolean).join(" — ");
     if (descParts) {
         doc.font("Helvetica").fontSize(8.5).fillColor(COLORS.text)
             .text(descParts, startX + padX, top + 45, { width: width - padX * 2, height: 18, ellipsis: true });
@@ -777,7 +807,7 @@ function renderListSection(doc, items, drawCard, emptyMessage) {
 }
 
 function renderCadreSection(doc, cadres) {
-    renderListSection(doc, cadres, drawCadreCard, "Aucun texte réglementaire renseigné pour ce secteur pour le moment.");
+    renderListSection(doc, cadres, drawCadreCard, L(doc).aucunTexteReglementaire);
 }
 
 /**
@@ -810,7 +840,7 @@ function drawZonesGraphiques(doc, zones) {
 
     const parType = Object.entries(
         liste.reduce((cumul, zone) => {
-            const cle = humanizeType(zone.type) || "Autre";
+            const cle = humanizeType(zone.type, doc) || L(doc).typeAutre;
             cumul[cle] = (cumul[cle] || 0) + 1;
             return cumul;
         }, {})
@@ -826,21 +856,21 @@ function drawZonesGraphiques(doc, zones) {
     if (parType.length < 2 && parSuperficie.length === 0) return;
 
     doc.moveDown(0.2);
-    drawSubHeading(doc, "Vue d'ensemble des zones");
+    drawSubHeading(doc, L(doc).vueEnsembleZones);
 
     bandeDeuxGraphiques(doc, 150, (colonne, cadre) => {
         if (colonne === 0) {
             drawDonutChart(doc, {
                 ...cadre,
-                titre: "Repartition par type",
+                titre: L(doc).repartitionParType,
                 parts: parType,
                 total: liste.length,
-                uniteTotal: "zones",
+                uniteTotal: L(doc).uniteZones,
             });
         } else {
             drawHorizontalBars(doc, {
                 ...cadre,
-                titre: "Superficie",
+                titre: L(doc).superficie,
                 unite: "km2",
                 entrees: parSuperficie,
             });
@@ -855,8 +885,8 @@ function drawActeursGraphiques(doc, acteurs) {
 
     const nationaux = liste.filter((a) => a.est_national !== false).length;
     const parOrigine = [
-        { nom: "Acteurs nationaux", valeur: nationaux },
-        { nom: "Acteurs etrangers", valeur: liste.length - nationaux },
+        { nom: L(doc).acteursNationaux, valeur: nationaux },
+        { nom: L(doc).acteursEtrangers, valeur: liste.length - nationaux },
     ];
 
     const parChiffre = liste
@@ -867,21 +897,21 @@ function drawActeursGraphiques(doc, acteurs) {
     if (parChiffre.length === 0 && liste.length < 2) return;
 
     doc.moveDown(0.2);
-    drawSubHeading(doc, "Structure du tissu d'acteurs");
+    drawSubHeading(doc, L(doc).structureActeurs);
 
     bandeDeuxGraphiques(doc, 150, (colonne, cadre) => {
         if (colonne === 0) {
             drawDonutChart(doc, {
                 ...cadre,
-                titre: "Origine du capital",
+                titre: L(doc).origineCapital,
                 parts: parOrigine,
                 total: liste.length,
-                uniteTotal: "acteurs",
+                uniteTotal: L(doc).uniteActeurs,
             });
         } else {
             drawHorizontalBars(doc, {
                 ...cadre,
-                titre: "Chiffre d'affaires",
+                titre: L(doc).chiffreAffaires,
                 unite: "MDT",
                 entrees: parChiffre,
             });
@@ -891,7 +921,7 @@ function drawActeursGraphiques(doc, acteurs) {
 
 function renderZonesSection(doc, zones) {
     drawZonesGraphiques(doc, zones);
-    renderListSection(doc, zones, drawZoneCard, "Aucune zone géographique renseignée pour ce secteur pour le moment.");
+    renderListSection(doc, zones, drawZoneCard, L(doc).aucuneZone);
     if (zones && zones.some((z) => z.type === "zone_franche")) {
         doc.moveDown(0.2);
         doc.x = doc.page.margins.left;
@@ -926,7 +956,7 @@ function renderBenchmarkTable(doc, benchmarks) {
     // combler le trou serait exactement l'erreur que cette table evite.
     const graphables = renseignes.slice(0, 3);
     if (graphables.length > 0) {
-        drawSubHeading(doc, "Comparatif régional en un coup d'œil");
+        drawSubHeading(doc, L(doc).comparatifCoupDoeil);
         const largeurTotale = contentWidth(doc);
         const espace = 14;
         const carteW = (largeurTotale - espace * (graphables.length - 1)) / graphables.length;
@@ -944,8 +974,8 @@ function renderBenchmarkTable(doc, benchmarks) {
                 largeur: carteW - 24,
                 hauteur: carteH - 20,
                 titre: ligne.indicateur,
-                unite: ligne.unite,
-                pays: ["Tunisie", "Maroc", "Égypte"],
+                unite: champ(doc, ligne, "unite"),
+                pays: [L(doc).tunisie, L(doc).maroc, L(doc).egypte],
                 valeurs: [ligne.valeur_tunisie, ligne.valeur_maroc, ligne.valeur_egypte],
             });
         });
@@ -954,12 +984,12 @@ function renderBenchmarkTable(doc, benchmarks) {
         doc.x = startX;
     }
 
-    drawSubHeading(doc, "Comparatif chiffré Tunisie – Maroc – Égypte");
+    drawSubHeading(doc, L(doc).comparatifChiffre);
     drawTable(doc, {
         rows: renseignes,
         columns: [
-            { label: "Indicateur", width: 0.40, render: (r) => r.indicateur },
-            { label: "Unité", width: 0.16, render: (r) => r.unite || "-" },
+            { label: L(doc).indicateur, width: 0.40, render: (r) => champ(doc, r, "indicateur") },
+            { label: L(doc).unite, width: 0.16, render: (r) => champ(doc, r, "unite") || "-" },
             { label: "Tunisie", width: 0.148, align: "right", bold: true,
               render: (r) => (r.valeur_tunisie != null ? formatNumber(r.valeur_tunisie, 2) : "N/D") },
             { label: "Maroc", width: 0.146, align: "right",
@@ -987,7 +1017,7 @@ function renderSourcesSection(doc, report) {
     const startX = doc.page.margins.left;
     const width = contentWidth(doc);
 
-    drawSubHeading(doc, "Sources des données sectorielles");
+    drawSubHeading(doc, L(doc).sourcesDonnees);
     const sources = Array.from(
         new Set((report.donneesStatistiques || []).map((r) => r.source).filter(Boolean))
     );
@@ -1001,7 +1031,7 @@ function renderSourcesSection(doc, report) {
     }
 
     doc.moveDown(0.4);
-    drawSubHeading(doc, "Méthodologie");
+    drawSubHeading(doc, L(doc).methodologie);
     renderParagraph(doc,
         "Ce rapport repose sur deux composantes complémentaires. Les sections chiffrées "
         + "(chiffres clés, séries statistiques, cadre réglementaire, zones géographiques et "
@@ -1018,7 +1048,7 @@ function renderSourcesSection(doc, report) {
     const avecProjection = (report.donneesStatistiques || []).filter(hasProjection);
     if (avecProjection.length > 0) {
         doc.moveDown(0.2);
-        drawSubHeading(doc, "Calcul des estimations");
+        drawSubHeading(doc, L(doc).calculEstimations);
 
         const parMethode = avecProjection.reduce((acc, r) => {
             if (r.methode_projection) acc[r.methode_projection] = (acc[r.methode_projection] || 0) + 1;
@@ -1063,9 +1093,9 @@ function renderSourcesSection(doc, report) {
     const photos = photosSecteur(report.secteur?.slug);
     if (photos.length > 0) {
         doc.moveDown(0.2);
-        drawSubHeading(doc, "Crédits photographiques");
+        drawSubHeading(doc, L(doc).creditsPhotos);
         photos.forEach((photo) => {
-            renderBullet(doc, `${photo.legende || photo.titre} ${ligneCredit(photo).replace("Photo : ", "— ")}`);
+            renderBullet(doc, `${photo.legende || photo.titre} ${ligneCredit(photo, doc).replace(L(doc).creditPhoto, "— ")}`);
         });
         doc.font("Helvetica-Oblique").fontSize(8.5).fillColor(COLORS.textMuted)
             .text("Photographies documentaires du secteur en Tunisie, reproduites sous leur licence "
@@ -1076,7 +1106,7 @@ function renderSourcesSection(doc, report) {
     }
 
     doc.moveDown(0.2);
-    drawSubHeading(doc, "Avertissement");
+    drawSubHeading(doc, L(doc).avertissement);
     doc.font("Helvetica-Oblique").fontSize(9).fillColor(COLORS.textMuted)
         .text(
             "Les analyses et projections présentées dans ce document sont fournies à titre informatif "
@@ -1090,7 +1120,10 @@ function renderSourcesSection(doc, report) {
 
     doc.moveDown(0.3);
     doc.font("Helvetica").fontSize(8.5).fillColor(COLORS.textLight)
-        .text(`Données mises à jour le ${formatDateFR(report.secteur?.date_maj)} — Rapport généré le ${formatDateFR(new Date())}.`, startX, doc.y, { width });
+        .text(L(doc).donneesMisesAJour(
+            formatDateFR(report.secteur?.date_maj, langueDe(doc)),
+            formatDateFR(new Date(), langueDe(doc)),
+        ), startX, doc.y, { width });
     doc.x = startX;
 }
 
@@ -1128,22 +1161,23 @@ function buildCoverPage(doc, report, { isPreview = false, nombrePages = null } =
     dessinerBandeauCouverture(doc, secteur, { x: 0, y: 0, largeur: w, hauteur: 210 });
 
     doc.font("Helvetica-Bold").fontSize(15).fillColor(COLORS.white)
-        .text("InvestPlatform", PAGE_MARGIN, 50, { lineBreak: false });
+        .text(L(doc).marque, PAGE_MARGIN, 50, { lineBreak: false });
     doc.font("Helvetica").fontSize(9.5).fillColor(COLORS.primaryLight)
-        .text("Tunisia Invest — Analyse sectorielle", PAGE_MARGIN, 70, { lineBreak: false });
+        .text(L(doc).baseline, PAGE_MARGIN, 70, { lineBreak: false });
 
     doc.font("Helvetica").fontSize(13).fillColor(COLORS.primaryLight)
-        .text(isPreview ? "APERÇU GRATUIT" : "RAPPORT SECTORIEL", PAGE_MARGIN, 118, { characterSpacing: 2, lineBreak: false });
+        .text(isPreview ? L(doc).apercuGratuit : L(doc).rapportSectoriel, PAGE_MARGIN, 118, { characterSpacing: 2, lineBreak: false });
     doc.font("Helvetica-Bold").fontSize(30).fillColor(COLORS.white)
-        .text(secteur.nom || "Secteur", PAGE_MARGIN, 140, { width: w - PAGE_MARGIN * 2 });
+        .text(nomSecteur(doc, secteur), PAGE_MARGIN, 140, { width: w - PAGE_MARGIN * 2 });
 
     // Corps
     doc.fillColor(COLORS.text);
     doc.y = 260;
     doc.x = PAGE_MARGIN;
-    if (secteur.description) {
+    const descriptionCouverture = descriptionSecteur(doc, secteur);
+    if (descriptionCouverture) {
         doc.font("Helvetica").fontSize(11.5).fillColor(COLORS.textMuted)
-            .text(secteur.description, PAGE_MARGIN, doc.y, { width: w - PAGE_MARGIN * 2, align: "center" });
+            .text(descriptionCouverture, PAGE_MARGIN, doc.y, { width: w - PAGE_MARGIN * 2, align: "center" });
     }
 
     // --- Chips (Pages / Mise à jour / Généré le) --------------------------
@@ -1155,9 +1189,9 @@ function buildCoverPage(doc, report, { isPreview = false, nombrePages = null } =
     // document, connu seulement une fois les sections rendues. La chip est
     // alors dessinée vide et remplie a posteriori par ecrireNombrePages().
     const chips = [
-        ["Pages", nombrePages !== null ? String(nombrePages) : null],
-        ["Mise à jour", formatDateFR(secteur.date_maj)],
-        ["Généré le", formatDateFR(new Date())],
+        [L(doc).pages, nombrePages !== null ? String(nombrePages) : null],
+        [L(doc).miseAJour, formatDateFR(secteur.date_maj, langueDe(doc))],
+        [L(doc).genereLe, formatDateFR(new Date(), langueDe(doc))],
     ];
     const chipW = (w - PAGE_MARGIN * 2 - 24) / 3;
     const chipRowY = doc.y;
@@ -1179,16 +1213,17 @@ function buildCoverPage(doc, report, { isPreview = false, nombrePages = null } =
     // Remplit l'espace de façon utile (plutôt qu'un grand vide) en donnant
     // un avant-goût réel du contenu du rapport.
     doc.font("Helvetica-Bold").fontSize(9).fillColor(COLORS.textMuted)
-        .text("CE RAPPORT COUVRE", PAGE_MARGIN, doc.y, { characterSpacing: 1.2, lineBreak: false });
+        .text(L(doc).ceRapportCouvre, PAGE_MARGIN, doc.y, { characterSpacing: 1.2, lineBreak: false });
     doc.y += 22;
 
     const colGap = 30;
     const colW = (w - PAGE_MARGIN * 2 - colGap) / 2;
-    const half = Math.ceil(SECTION_TITLES.length / 2);
+    const titres = titresSections(doc);
+    const half = Math.ceil(titres.length / 2);
     const listTop = doc.y;
     let leftY = listTop;
     let rightY = listTop;
-    SECTION_TITLES.forEach((title, i) => {
+    titres.forEach((title, i) => {
         const col = i < half ? 0 : 1;
         const cx = PAGE_MARGIN + col * (colW + colGap);
         const cy = col === 0 ? leftY : rightY;
@@ -1200,7 +1235,7 @@ function buildCoverPage(doc, report, { isPreview = false, nombrePages = null } =
     doc.y = Math.max(leftY, rightY) + 14;
     doc.x = PAGE_MARGIN;
 
-    const badgeText = "DONNÉES OFFICIELLES · ANALYSE SECTORIELLE";
+    const badgeText = L(doc).badgeOfficiel;
     doc.font("Helvetica-Bold").fontSize(8.5);
     const bw = doc.widthOfString(badgeText) + 24;
     const bx = (w - bw) / 2;
@@ -1210,9 +1245,9 @@ function buildCoverPage(doc, report, { isPreview = false, nombrePages = null } =
     // --- Pied de couverture ----------------------------------------------
     withoutBottomMargin(doc, () => {
         doc.font("Helvetica").fontSize(8.5).fillColor(COLORS.textLight)
-            .text("Sources officielles tunisiennes — INS, BCT, ONTT et administrations sectorielles.",
+            .text(L(doc).sourcesCouverture,
                 PAGE_MARGIN, 762, { width: w - PAGE_MARGIN * 2, align: "center", lineBreak: false });
-        doc.text("Document confidentiel — usage réservé au destinataire.", PAGE_MARGIN, 776, {
+        doc.text(L(doc).confidentiel, PAGE_MARGIN, 776, {
             width: w - PAGE_MARGIN * 2, align: "center", lineBreak: false,
         });
     });
@@ -1231,7 +1266,7 @@ function buildTOC(doc, { withPageNumbers = true } = {}) {
     const width = contentWidth(doc);
     doc.x = startX;
 
-    doc.font("Helvetica-Bold").fontSize(21).fillColor(COLORS.primary).text("Sommaire", startX, doc.y);
+    doc.font("Helvetica-Bold").fontSize(21).fillColor(COLORS.primary).text(L(doc).sommaire, startX, doc.y);
     doc.moveDown(0.4);
     doc.x = startX;
     doc.moveTo(startX, doc.y).lineTo(startX + width, doc.y).strokeColor(COLORS.border).lineWidth(1.25).stroke();
@@ -1241,7 +1276,7 @@ function buildTOC(doc, { withPageNumbers = true } = {}) {
     const entries = [];
     const rowH = 34;
 
-    SECTION_CATALOG.forEach((item, idx) => {
+    catalogueSections(doc).forEach((item, idx) => {
         ensureSpace(doc, rowH);
         const rowY = doc.y;
         const range = doc.bufferedPageRange();
@@ -1252,7 +1287,7 @@ function buildTOC(doc, { withPageNumbers = true } = {}) {
         doc.font("Helvetica-Bold").fontSize(11.5).fillColor(COLORS.text)
             .text(item.title, startX + 32, rowY + 2, { width: width - 32 - 50, lineBreak: false });
         doc.font("Helvetica").fontSize(8).fillColor(item.badge.color)
-            .text(item.badge.text.toUpperCase(), startX + 32, rowY + 17, { width: width - 32 - 50, lineBreak: false });
+            .text(L(doc)[item.badge.cleTexte].toUpperCase(), startX + 32, rowY + 17, { width: width - 32 - 50, lineBreak: false });
 
         const numW = 40;
         const numX = startX + width - numW;
@@ -1319,8 +1354,28 @@ const RENDERERS = {
 // 10. ORCHESTRATION
 // ============================================================================
 
-function createDocument(title) {
-    return new PDFDocument({
+/**
+ * Nom du secteur dans la langue du document.
+ *
+ * Le nom vient de la base (colonnes `nom` / `nom_en`, migration 009). Une
+ * traduction absente retombe sur le français : mieux vaut un titre français
+ * dans un rapport anglais qu'une couverture sans nom de secteur.
+ */
+function descriptionSecteur(doc, secteur) {
+    if (!secteur) return "";
+    const enAnglais = langueDe(doc) === "en";
+    return (enAnglais ? (secteur.description_en || secteur.description) : secteur.description) || "";
+}
+
+function nomSecteur(doc, secteur) {
+    if (!secteur) return L(doc).secteurParDefaut;
+    const enAnglais = langueDe(doc) === "en";
+    const choisi = enAnglais ? (secteur.nom_en || secteur.nom) : secteur.nom;
+    return choisi || L(doc).secteurParDefaut;
+}
+
+function createDocument(title, langue) {
+    const doc = new PDFDocument({
         size: "A4",
         margin: PAGE_MARGIN,
         bufferPages: true,
@@ -1330,6 +1385,12 @@ function createDocument(title) {
             Subject: "Rapport sectoriel InvestPlatform",
         },
     });
+    // La langue est portée par le DOCUMENT, pas par le module : deux rapports
+    // commandés dans deux langues peuvent se générer en même temps, et les
+    // appels au modèle de rédaction laissent tout le loisir aux deux
+    // générations de s'entrelacer.
+    attacherLibelles(doc, langue);
+    return doc;
 }
 
 /**
@@ -1369,12 +1430,13 @@ async function generateReportPDF(report) {
     const filename = `rapport_${slugify(secteur.slug || secteur.nom)}_${Date.now()}.pdf`;
     const filePath = path.join(config.reportsDir, filename);
 
-    const doc = createDocument(`Rapport Sectoriel — ${secteur.nom || ""}`);
+    const doc = createDocument(`Rapport Sectoriel — ${secteur.nom || ""}`, report.langue);
+    const titreCourant = nomSecteur(doc, secteur);
 
     let pageNum = 1;
     doc.on("pageAdded", () => {
         pageNum += 1;
-        drawHeaderFooter(doc, secteur.nom || "", pageNum);
+        drawHeaderFooter(doc, titreCourant, pageNum);
     });
 
     // ---- Page 1 : couverture --------------------------------------------
@@ -1387,7 +1449,7 @@ async function generateReportPDF(report) {
     const tocEntries = buildTOC(doc);
 
     // ---- Pages 3+ : une section par page (le texte long déborde librement)
-    SECTION_CATALOG.forEach((section, i) => {
+    catalogueSections(doc).forEach((section, i) => {
         doc.addPage();
         tocEntries[i].page = pageNum;
         sectionHeader(doc, {
@@ -1423,15 +1485,20 @@ async function generatePreviewPDF(report) {
     ensureReportsDir();
 
     const secteur = report.secteur || {};
-    const filename = `apercu_${slugify(secteur.slug || secteur.nom)}.pdf`;
+    // Le nom DOIT s'accorder avec celui que `generatePreview` cherche en cache,
+    // langue comprise : deux conventions divergentes feraient regenerer
+    // l'apercu a chaque visite, sans jamais toucher le fichier deja produit.
+    const langueApercu = normaliserLangue(report.langue);
+    const filename = `apercu_${slugify(secteur.slug || secteur.nom)}_${langueApercu}.pdf`;
     const filePath = path.join(config.reportsDir, filename);
 
-    const doc = createDocument(`Aperçu gratuit — ${secteur.nom || ""}`);
+    const doc = createDocument(`Aperçu gratuit — ${secteur.nom || ""}`, langueApercu);
+    const titreCourant = nomSecteur(doc, secteur);
 
     let pageNum = 1;
     doc.on("pageAdded", () => {
         pageNum += 1;
-        drawHeaderFooter(doc, secteur.nom || "", pageNum);
+        drawHeaderFooter(doc, titreCourant, pageNum);
     });
 
     // L'aperçu annonce le volume du rapport complet, tel que mesuré lors de la
@@ -1449,14 +1516,11 @@ async function generatePreviewPDF(report) {
     const top = doc.y + 10;
     doc.roundedRect(startX, top, width, 74, 8).fillAndStroke(COLORS.primaryBg, COLORS.primaryLight);
     doc.font("Helvetica-Bold").fontSize(13).fillColor(COLORS.primaryDark)
-        .text(`Aperçu gratuit — 2 pages sur ${pagesRapport}`,
+        .text(L(doc).apercuTitre(pagesRapport),
             startX + 20, top + 16, { width: width - 40, lineBreak: false });
     doc.font("Helvetica").fontSize(10).fillColor(COLORS.primary)
         .text(
-            `Le rapport complet développe les ${SECTION_CATALOG.length} sections listées ci-dessus : `
-            + "chiffres clés et graphiques, acteurs, cadre réglementaire, zones franches, "
-            + "puis l'analyse rédigée (tendances, opportunités, risques, benchmarking régional, "
-            + "recommandations et perspectives 2025-2028).",
+            L(doc).apercuTexte(SECTION_CATALOG.length),
             startX + 20, top + 38, { width: width - 40 }
         );
 

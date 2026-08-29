@@ -12,6 +12,8 @@ import { StatCard } from '@/components/ui/stat-card';
 import {
   ChampRecherche, TableWrapper, Tbody, Td, Th, Thead, Tr, TrMessage,
 } from '@/components/ui/table';
+import { useTraduction } from '@/i18n';
+import type { Dictionnaire } from '@/i18n/fr';
 import { api } from '@/lib/api';
 import { cles } from '@/lib/queryClient';
 import type { Compte, Role } from '@/lib/types';
@@ -19,13 +21,16 @@ import { cn, formatDate, formatNombre, initiales } from '@/lib/utils';
 
 type Filtre = 'tous' | Role;
 
-const FILTRES: { cle: Filtre; libelle: string }[] = [
-  { cle: 'tous', libelle: 'Tous' },
-  { cle: 'admin', libelle: 'Administrateurs' },
-  { cle: 'client', libelle: 'Clients' },
-];
+function filtres(t: Dictionnaire): { cle: Filtre; libelle: string }[] {
+  return [
+    { cle: 'tous', libelle: t.admin.filtreTous },
+    { cle: 'admin', libelle: t.admin.filtreAdministrateurs },
+    { cle: 'client', libelle: t.admin.filtreClients },
+  ];
+}
 
 export default function Comptes() {
+  const { t } = useTraduction();
   const queryClient = useQueryClient();
   const { compte: moi } = useAuth();
   const [recherche, setRecherche] = useState('');
@@ -36,12 +41,12 @@ export default function Comptes() {
   const changerRole = useMutation({
     mutationFn: ({ id, role }: { id: number; role: Role }) => api.setRole(id, role),
     onSuccess: ({ compte }) => {
-      toast.success(`${compte.prenom ?? compte.email} est désormais ${compte.role}`);
+      toast.success(t.admin.roleChange(compte.prenom ?? compte.email, compte.role));
       queryClient.invalidateQueries({ queryKey: cles.adminComptes });
     },
     // Les garde-fous vivent côté serveur (dernier administrateur, auto-rétrogradation) :
     // on affiche son refus tel quel plutôt que de dupliquer la règle ici.
-    onError: (erreur: Error) => toast.error('Changement refusé', { description: erreur.message }),
+    onError: (erreur: Error) => toast.error(t.admin.changementRefuse, { description: erreur.message }),
   });
 
   const tous = comptes.data?.comptes ?? [];
@@ -67,26 +72,25 @@ export default function Comptes() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="font-display text-2xl font-bold">Comptes</h1>
+        <h1 className="font-display text-2xl font-bold">{t.admin.comptesTitre}</h1>
         <p className="mt-1 text-sm text-[hsl(var(--muted))]">
-          Un rôle prend effet immédiatement : il est relu en base à chaque requête,
-          sans attendre l&apos;expiration de la session concernée.
+          {t.admin.comptesAccroche}
         </p>
       </header>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard index={0} libelle="Comptes" valeur={formatNombre(tous.length)} Icone={Users} />
-        <StatCard index={1} libelle="Administrateurs" valeur={formatNombre(admins)}
+        <StatCard index={0} libelle={t.admin.nombreComptes} valeur={formatNombre(tous.length)} Icone={Users} />
+        <StatCard index={1} libelle={t.admin.administrateurs} valeur={formatNombre(admins)}
           Icone={ShieldCheck} teinte="accent" />
-        <StatCard index={2} libelle="Comptes actifs" valeur={formatNombre(actifs)}
+        <StatCard index={2} libelle={t.admin.comptesActifs} valeur={formatNombre(actifs)}
           Icone={User} teinte="succes"
-          detail={tous.length > actifs ? `${tous.length - actifs} désactivé(s)` : undefined} />
+          detail={tous.length > actifs ? t.admin.desactives(tous.length - actifs) : undefined} />
       </div>
 
       <Card>
         <CardHeader className="flex-row flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap gap-1.5">
-            {FILTRES.map(({ cle, libelle }) => (
+            {filtres(t).map(({ cle, libelle }) => (
               <button
                 key={cle}
                 type="button"
@@ -103,7 +107,7 @@ export default function Comptes() {
               </button>
             ))}
           </div>
-          <ChampRecherche valeur={recherche} onChange={setRecherche} placeholder="Nom, email, entreprise…" />
+          <ChampRecherche valeur={recherche} onChange={setRecherche} placeholder={t.admin.rechercherCompte} />
         </CardHeader>
 
         <CardContent className="px-0 sm:px-0">
@@ -114,17 +118,17 @@ export default function Comptes() {
           ) : (
             <TableWrapper className="px-2 sm:px-3">
               <Thead>
-                <Th>Compte</Th>
-                <Th>Entreprise</Th>
-                <Th>Pays</Th>
-                <Th>Inscrit le</Th>
-                <Th>Dernière connexion</Th>
-                <Th>Rôle</Th>
+                <Th>{t.admin.colonneCompte}</Th>
+                <Th>{t.admin.colonneEntreprise}</Th>
+                <Th>{t.admin.colonnePays}</Th>
+                <Th>{t.admin.colonneInscritLe}</Th>
+                <Th>{t.admin.colonneDerniereConnexion}</Th>
+                <Th>{t.admin.colonneRole}</Th>
                 <Th />
               </Thead>
               <Tbody>
                 {liste.length === 0 && (
-                  <TrMessage colonnes={7}>Aucun compte ne correspond à ces critères.</TrMessage>
+                  <TrMessage colonnes={7}>{t.admin.aucunCompteCorrespond}</TrMessage>
                 )}
 
                 {liste.map((compte) => {
@@ -155,7 +159,7 @@ export default function Comptes() {
                         {formatDate(compte.created_at)}
                       </Td>
                       <Td className="whitespace-nowrap text-[hsl(var(--muted))]">
-                        {compte.derniere_connexion ? formatDate(compte.derniere_connexion, true) : 'jamais'}
+                        {compte.derniere_connexion ? formatDate(compte.derniere_connexion, true) : t.admin.jamais}
                       </Td>
                       <Td>
                         <div className="flex flex-wrap items-center gap-1.5">
@@ -163,7 +167,7 @@ export default function Comptes() {
                             {compte.role === 'admin' ? <ShieldCheck /> : <User />}
                             {compte.role}
                           </Badge>
-                          {!compte.est_actif && <Badge variant="danger">désactivé</Badge>}
+                          {!compte.est_actif && <Badge variant="danger">{t.admin.desactive}</Badge>}
                         </div>
                       </Td>
                       <Td>
@@ -177,7 +181,7 @@ export default function Comptes() {
                             onClick={() => basculerRole(compte)}
                           >
                             <UserCog />
-                            {compte.role === 'admin' ? 'Rétrograder' : 'Promouvoir'}
+                            {compte.role === 'admin' ? t.admin.retrograder : t.admin.promouvoir}
                           </Button>
                         </div>
                       </Td>

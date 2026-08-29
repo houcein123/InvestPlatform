@@ -4,6 +4,8 @@ import { ArrowRight, Eye, FileText } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useTraduction } from '@/i18n';
+import { useLibelleSecteur } from '@/i18n/donnees';
 import { api } from '@/lib/api';
 import type { Secteur } from '@/lib/types';
 import { formatDate, formatMontant } from '@/lib/utils';
@@ -27,6 +29,9 @@ interface Props {
  * du paiement.
  */
 export function CarteSecteur({ secteur, devise, equivalent, index }: Props) {
+  const { t, langue } = useTraduction();
+  const libelle = useLibelleSecteur();
+
   return (
     <motion.article
       className="surface-card group flex flex-col"
@@ -38,18 +43,18 @@ export function CarteSecteur({ secteur, devise, equivalent, index }: Props) {
       <div className="flex items-start gap-4 p-6 pb-4">
         <IconeSecteur slug={secteur.slug} />
         <div className="min-w-0 flex-1">
-          <h3 className="font-display text-lg font-semibold leading-tight">{secteur.nom}</h3>
+          <h3 className="font-display text-lg font-semibold leading-tight">{libelle.nom(secteur)}</h3>
           <p className="mt-1 text-sm leading-relaxed text-[hsl(var(--muted))]">
-            {secteur.description}
+            {libelle.description(secteur)}
           </p>
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2 px-6 pb-5">
         <Badge variant="neutre">
-          <FileText /> {secteur.nombre_pages} pages
+          <FileText /> {t.carteSecteur.pages(secteur.nombre_pages)}
         </Badge>
-        <Badge variant="neutre">Mis à jour le {formatDate(secteur.date_maj)}</Badge>
+        <Badge variant="neutre">{t.carteSecteur.misAJourLe(formatDate(secteur.date_maj))}</Badge>
       </div>
 
       <div className="mt-auto flex flex-wrap items-end justify-between gap-4 border-t border-[hsl(var(--border))] p-6">
@@ -59,20 +64,20 @@ export function CarteSecteur({ secteur, devise, equivalent, index }: Props) {
           </p>
           {equivalent && (
             <p className="text-xs text-[hsl(var(--muted))]">
-              débité {formatMontant(equivalent.montant, equivalent.devise)}
+              {t.carteSecteur.debite(formatMontant(equivalent.montant, equivalent.devise))}
             </p>
           )}
         </div>
 
         <div className="flex items-center gap-2">
           <Button asChild variant="outline" size="sm">
-            <a href={api.previewUrl(secteur.id)} target="_blank" rel="noreferrer">
-              <Eye /> Aperçu
+            <a href={api.previewUrl(secteur.id, langue)} target="_blank" rel="noreferrer">
+              <Eye /> {t.carteSecteur.apercu}
             </a>
           </Button>
           <Button asChild>
             <Link to={`/paiement/${secteur.id}`}>
-              Commander <ArrowRight className="transition-transform group-hover:translate-x-0.5" />
+              {t.carteSecteur.commander} <ArrowRight className="transition-transform group-hover:translate-x-0.5" />
             </Link>
           </Button>
         </div>

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Check, Lock } from 'lucide-react';
+import { ArrowLeft, Check, Languages, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,8 @@ import { FormulaireSimulation } from '@/features/paiement/FormulaireSimulation';
 import { RecapitulatifCommande } from '@/features/paiement/RecapitulatifCommande';
 import { PanneauGeneration } from '@/features/rapport/PanneauGeneration';
 import { useGenerationRapport } from '@/features/rapport/useGenerationRapport';
+import { LANGUES, useTraduction, type Langue } from '@/i18n';
+import type { Dictionnaire } from '@/i18n/fr';
 import { api } from '@/lib/api';
 import { cles } from '@/lib/queryClient';
 import type { PaiementConfirme } from '@/lib/types';
@@ -19,15 +21,24 @@ import { formatMontant } from '@/lib/utils';
 
 type Etape = 'paiement' | 'generation';
 
-const ETAPES: { cle: Etape | 'livraison'; libelle: string }[] = [
-  { cle: 'paiement', libelle: 'Paiement' },
-  { cle: 'generation', libelle: 'Génération' },
-  { cle: 'livraison', libelle: 'Téléchargement' },
-];
+/** Le fil d'etapes, dans la langue active. */
+function etapes(t: Dictionnaire): { cle: Etape | 'livraison'; libelle: string }[] {
+  return [
+    { cle: 'paiement', libelle: t.paiement.etapePaiement },
+    { cle: 'generation', libelle: t.paiement.etapeGeneration },
+    { cle: 'livraison', libelle: t.paiement.etapeLivraison },
+  ];
+}
 
 export default function Paiement() {
   const { id } = useParams<{ id: string }>();
+  const { t, langue } = useTraduction();
   const sectorId = Number(id);
+
+  // La langue du RAPPORT est initialisée sur celle de l'interface — le choix
+  // le plus probable — mais reste modifiable : un lecteur francophone peut
+  // commander un document anglais pour un partenaire ou un dossier bancaire.
+  const [langueRapport, setLangueRapport] = useState<Langue>(langue);
 
   const [etape, setEtape] = useState<Etape>('paiement');
   const [achatId, setAchatId] = useState<number | null>(null);
@@ -60,30 +71,31 @@ export default function Paiement() {
     if (achatLance.current === achatId) return;
 
     achatLance.current = achatId;
-    lancerGeneration({ sectorId, achatId });
-  }, [etape, achatId, sectorId, lancerGeneration]);
+    lancerGeneration({ sectorId, achatId, langue: langueRapport });
+  }, [etape, achatId, sectorId, lancerGeneration, langueRapport]);
 
   function surPaiementConfirme(resultat: PaiementConfirme & { achatId: number }) {
     setAchatId(resultat.achatId);
     setEtape('generation');
     toast.success(
-      resultat.mode === 'paypal' ? 'Paiement confirmé' : 'Commande confirmée',
-      { description: `${formatMontant(resultat.montant, resultat.devise)} — la rédaction démarre.` },
+      resultat.mode === 'paypal' ? t.paiement.paiementConfirme : t.paiement.commandeConfirmee,
+      { description: t.paiement.redactionDemarre(formatMontant(resultat.montant, resultat.devise)) },
     );
   }
 
   const etapeCourante = etape === 'paiement' ? 0 : generation.termine ? 2 : 1;
+  const listeEtapes = etapes(t);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <Button asChild variant="ghost" size="sm" className="-ml-2">
-        <Link to="/"><ArrowLeft /> Retour au catalogue</Link>
+        <Link to="/"><ArrowLeft /> {t.paiement.retourCatalogue}</Link>
       </Button>
 
       {/* Fil d'etapes : sur un parcours qui melange paiement et attente longue,
           savoir ou l'on en est evite de croire que le processus est bloque. */}
       <ol className="flex items-center gap-3">
-        {ETAPES.map((element, index) => {
+        {listeEtapes.map((element, index) => {
           const atteinte = index <= etapeCourante;
           return (
             <li key={element.cle} className="flex flex-1 items-center gap-3">
@@ -99,7 +111,7 @@ export default function Paiement() {
               <span className={`hidden text-sm font-medium sm:block ${atteinte ? '' : 'text-[hsl(var(--muted))]'}`}>
                 {element.libelle}
               </span>
-              {index < ETAPES.length - 1 && (
+              {index < listeEtapes.length - 1 && (
                 <span className="h-px flex-1 bg-[hsl(var(--border))]" aria-hidden />
               )}
             </li>
@@ -115,11 +127,43 @@ export default function Paiement() {
               animate={{ opacity: 1, y: 0 }}
               className="surface-card p-6"
             >
-              <h2 className="font-display text-lg font-semibold">Règlement</h2>
+              <h2 className="font-display text-lg font-semibold">{t.paiement.reglementTitre}</h2>
               <p className="mb-5 mt-1 text-sm text-[hsl(var(--muted))]">
-                Le montant est calculé par le serveur a partir du tarif du catalogue.
-                Il n&apos;est jamais transmis depuis votre navigateur.
+                {t.paiement.reglementTexte}
               </p>
+
+              <fieldset className="mb-6 rounded-[var(--radius-control)] border border-[hsl(var(--border))] p-4">
+                <legend className="px-1.5 text-sm font-semibold">
+                  {t.paiement.langueRapportTitre}
+                </legend>
+                <div className="mt-1 grid gap-2 sm:grid-cols-2">
+                  {LANGUES.map((code) => {
+                    const actif = langueRapport === code;
+                    return (
+                      <button
+                        key={code}
+                        type="button"
+                        onClick={() => setLangueRapport(code)}
+                        aria-pressed={actif}
+                        className={
+                          'flex items-center gap-2.5 rounded-[var(--radius-control)] border p-3 text-left text-sm transition-colors '
+                          + (actif
+                            ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary-soft))] font-medium'
+                            : 'border-[hsl(var(--border))] hover:bg-[hsl(var(--surface-muted))]')
+                        }
+                      >
+                        <Languages
+                          className={'size-4 ' + (actif ? 'text-[hsl(var(--primary))]' : 'text-[hsl(var(--muted))]')}
+                        />
+                        {code === 'fr' ? t.paiement.langueFrancais : t.paiement.langueAnglais}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-2.5 text-xs leading-relaxed text-[hsl(var(--muted))]">
+                  {t.paiement.langueRapportAide}
+                </p>
+              </fieldset>
 
               {config.isLoading && <Skeleton className="h-32 w-full" />}
 
@@ -128,19 +172,19 @@ export default function Paiement() {
                   config={config.data}
                   sectorId={sectorId}
                   onPaiementConfirme={surPaiementConfirme}
-                  onErreur={(message) => toast.error('Paiement interrompu', { description: message })}
+                  onErreur={(message) => toast.error(t.paiement.paiementInterrompu, { description: message })}
                 />
               ) : config.data ? (
                 <FormulaireSimulation
                   sectorId={sectorId}
                   onPaiementConfirme={surPaiementConfirme}
-                  onErreur={(message) => toast.error('Commande interrompue', { description: message })}
+                  onErreur={(message) => toast.error(t.paiement.commandeInterrompue, { description: message })}
                 />
               ) : null}
 
               <p className="mt-5 flex items-center gap-2 text-xs text-[hsl(var(--muted))]">
                 <Lock className="size-3.5" />
-                Vos identifiants de paiement ne transitent jamais par cette plateforme.
+                {t.paiement.identifiantsJamais}
               </p>
             </motion.section>
           ) : (
@@ -165,7 +209,7 @@ export default function Paiement() {
           <RecapitulatifCommande secteur={secteur.data.secteur} config={config.data} />
         ) : (
           <aside className="surface-card h-fit p-6 text-sm text-[hsl(var(--muted))]">
-            Secteur introuvable.
+            {t.paiement.secteurIntrouvable}
           </aside>
         )}
       </div>

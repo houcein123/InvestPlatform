@@ -16,6 +16,17 @@ const { config } = require("../config/env");
 
 const client = config.groqApiKey ? new Groq({ apiKey: config.groqApiKey }) : null;
 
+/**
+ * Client de relecture, sur sa propre clé.
+ *
+ * Instance SÉPARÉE même quand les deux clés sont identiques : le SDK garde par
+ * client son état de connexion et ses en-têtes de quota, et les mélanger ferait
+ * réagir la rédaction aux 429 de la relecture.
+ */
+const clientVerification = config.groqApiKeyVerification
+    ? new Groq({ apiKey: config.groqApiKeyVerification })
+    : null;
+
 /** Nombre de tentatives par section, première incluse. */
 const MAX_TENTATIVES = 4;
 
@@ -102,17 +113,23 @@ function calculerAttente(err, tentative) {
  * @throws si la clé est absente, si l'erreur n'est pas récupérable, ou si
  *         toutes les tentatives ont échoué.
  */
-async function generateText(prompt, { maxTokens = 1500, temperature = 0.5, onRetry } = {}) {
-    if (!client) {
-        throw new Error("GROQ_API_KEY absente : rédaction indisponible");
+async function generateText(prompt, {
+    maxTokens = 1500, temperature = 0.5, onRetry, model, verification = false,
+} = {}) {
+    // La relecture emprunte son propre client, donc son propre quota.
+    const appelant = verification ? clientVerification : client;
+    if (!appelant) {
+        throw new Error(verification
+            ? "GROQ_API_KEY_TEST_QUALITY absente : relecture indisponible"
+            : "GROQ_API_KEY absente : rédaction indisponible");
     }
 
     let derniereErreur;
 
     for (let tentative = 1; tentative <= MAX_TENTATIVES; tentative++) {
         try {
-            const completion = await client.chat.completions.create({
-                model: config.groqModel,
+            const completion = await appelant.chat.completions.create({
+                model: model || config.groqModel,
                 messages: [{ role: "user", content: prompt }],
                 temperature,
                 max_tokens: maxTokens,
@@ -128,7 +145,7 @@ async function generateText(prompt, { maxTokens = 1500, temperature = 0.5, onRet
             // Un 429 renseigne l'espacement des appels suivants : la limite est
             // par MINUTE, la section d'apres la depasserait aussi.
             const statut = err?.status ?? err?.response?.status;
-            if (statut === 429) {
+            if (statut === 429 && !verification) {
                 dernierQuotaAtteint = Date.now();
                 attenteQuotaMs = attente;
             }
@@ -206,6 +223,12 @@ module.exports = {
     espacerSiQuotaRecent,
     verifierAcces,
     model: config.groqModel,
+    modelVerification: config.groqModelVerification,
     isConfigured: !!client,
+    verificationConfiguree: !!clientVerification,
+    /** Vrai si la relecture a sa propre clé, distincte de la rédaction. */
+    cleVerificationDediee:
+        !!config.groqApiKeyVerification
+        && config.groqApiKeyVerification !== config.groqApiKey,
     MAX_TENTATIVES,
 };

@@ -2,6 +2,8 @@ import {
   Bar, BarChart, CartesianGrid, Cell, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 
+import { useTraduction } from '@/i18n';
+import { useChampTraduit } from '@/i18n/donnees';
 import type { StatSecteur } from '@/lib/types';
 
 import { COULEUR_AXE, COULEUR_GRILLE, couleurSerie } from './palette';
@@ -16,8 +18,13 @@ import { InfobulleGraphique } from './InfobulleGraphique';
  * `achats.mode_paiement` sert a eviter cote base.
  */
 export function GraphiqueVentes({ donnees }: { donnees: StatSecteur[] }) {
+  const { t } = useTraduction();
+  const champ = useChampTraduit();
   const series = donnees.map((secteur) => ({
-    nom: secteur.nom,
+    // Le nom sert d'etiquette d'axe : il doit suivre la langue, comme la
+    // legende du camembert voisin, sinon les deux graphiques d'un meme ecran
+    // designent les memes secteurs par des noms differents.
+    nom: champ(secteur, 'nom'),
     Reel: Number(secteur.revenu ?? 0),
     Simule: Number(secteur.revenu_simule ?? 0),
   }));
@@ -47,14 +54,14 @@ export function GraphiqueVentes({ donnees }: { donnees: StatSecteur[] }) {
           content={(props) => <InfobulleGraphique {...props} unite="TND" />}
         />
         <Legend wrapperStyle={{ fontSize: 12, color: COULEUR_AXE }} />
-        <Bar dataKey="Reel" name="Chiffre d'affaires" radius={[6, 6, 0, 0]} maxBarSize={44}>
+        <Bar dataKey="Reel" name={t.admin.legendeReel} radius={[6, 6, 0, 0]} maxBarSize={44}>
           {series.map((_, index) => (
             <Cell key={index} fill={couleurSerie(index)} />
           ))}
         </Bar>
         <Bar
           dataKey="Simule"
-          name="Commandes simulées"
+          name={t.admin.legendeSimule}
           radius={[6, 6, 0, 0]}
           maxBarSize={44}
           fill="hsl(var(--muted) / 0.35)"

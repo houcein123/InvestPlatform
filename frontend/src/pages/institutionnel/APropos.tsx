@@ -4,39 +4,39 @@ import {
 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useTraduction } from '@/i18n';
+import type { Dictionnaire } from '@/i18n/fr';
 import { SOURCES_OFFICIELLES } from '@/lib/entreprise';
 
-const ETAPES_METHODE = [
-  {
-    Icone: FileCheck2,
-    titre: 'Collecte des données publiées',
-    texte: "Les séries statistiques proviennent des organismes publics tunisiens. Elles sont importées telles quelles, sans retraitement, et chaque indicateur conserve la référence de sa source.",
-  },
-  {
-    Icone: LineChart,
-    titre: 'Calcul des perspectives',
-    texte: "Deux modèles sont mis en concurrence sur chaque série — régression linéaire par moindres carrés et taux de croissance annuel moyen — et celui qui s'ajuste le mieux à l'historique est retenu. Une série dont aucun modèle n'atteint un coefficient de détermination suffisant ne reçoit aucune estimation.",
-  },
-  {
-    Icone: ScrollText,
-    titre: 'Rédaction adossée aux chiffres',
-    texte: "Les sections d'analyse sont rédigées à partir du seul jeu de données du secteur, transmis intégralement au modèle de langage avec la consigne de n'avancer aucun chiffre absent de ce jeu. Le procédé et le modèle employés sont décrits dans la section « Sources et méthodologie » de chaque rapport.",
-  },
-  {
-    Icone: ShieldCheck,
-    titre: "Séparation de l'observé et de l'estimé",
-    texte: "Une donnée publiée et une projection calculée ne sont jamais présentées de la même façon, ni dans l'interface ni dans le PDF : couleurs distinctes, tracé différent, mention explicite. Présenter une extrapolation comme un fait serait la faute la plus grave que puisse commettre ce service.",
-  },
-];
+/** Les quatre étapes de fabrication, dans la langue active. */
+function etapesMethode(t: Dictionnaire) {
+  return [
+    { Icone: FileCheck2, titre: t.apropos.methodeCollecteTitre, texte: t.apropos.methodeCollecteTexte },
+    { Icone: LineChart, titre: t.apropos.methodeCalculTitre, texte: t.apropos.methodeCalculTexte },
+    { Icone: ScrollText, titre: t.apropos.methodeRedactionTitre, texte: t.apropos.methodeRedactionTexte },
+    { Icone: ShieldCheck, titre: t.apropos.methodeSeparationTitre, texte: t.apropos.methodeSeparationTexte },
+  ];
+}
 
-const CHIFFRES = [
-  { valeur: '6', libelle: 'secteurs couverts' },
-  { valeur: '12', libelle: 'sections par rapport' },
-  { valeur: '14+', libelle: 'pages par document' },
-  { valeur: '2020-2028', libelle: 'profondeur temporelle' },
-];
+/**
+ * Repères chiffrés.
+ *
+ * Les VALEURS restent hors dictionnaire : « 6 » ou « 2020-2028 » se lisent
+ * identiquement dans les deux langues, et les dupliquer inviterait à les
+ * corriger d'un côté seulement. Seuls les libellés sont traduits.
+ */
+function chiffres(t: Dictionnaire) {
+  return [
+    { valeur: '6', libelle: t.apropos.chiffreSecteurs },
+    { valeur: '12', libelle: t.apropos.chiffreSections },
+    { valeur: '14+', libelle: t.apropos.chiffrePages },
+    { valeur: '2020-2028', libelle: t.apropos.chiffreProfondeur },
+  ];
+}
 
 export default function APropos() {
+  const { t } = useTraduction();
+
   return (
     <div className="mx-auto max-w-4xl space-y-10">
       <motion.header
@@ -45,21 +45,18 @@ export default function APropos() {
         className="rounded-[var(--radius-card)] border border-[hsl(var(--border))] bg-gradient-to-br from-[hsl(var(--surface))] to-[hsl(var(--surface-muted))] p-8 sm:p-10"
       >
         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(var(--primary))]">
-          Qui sommes-nous
+          {t.apropos.surtitre}
         </p>
         <h1 className="font-display text-3xl font-extrabold leading-tight sm:text-4xl">
-          Rendre l&apos;économie tunisienne lisible pour ceux qui envisagent d&apos;y investir.
+          {t.apropos.titre}
         </h1>
         <p className="mt-5 max-w-2xl text-base leading-relaxed text-[hsl(var(--muted))]">
-          Un investisseur étranger qui étudie la Tunisie se heurte à des données dispersées
-          entre plusieurs organismes, publiées à des rythmes différents et rarement mises en
-          perspective. Tunisia Invest rassemble ces séries, les met en forme et les commente,
-          secteur par secteur, dans un document unique.
+          {t.apropos.accroche}
         </p>
       </motion.header>
 
       <section className="grid gap-4 sm:grid-cols-4">
-        {CHIFFRES.map((chiffre, index) => (
+        {chiffres(t).map((chiffre, index) => (
           <motion.div
             key={chiffre.libelle}
             initial={{ opacity: 0, y: 12 }}
@@ -78,16 +75,14 @@ export default function APropos() {
       <section id="methode" className="scroll-mt-24">
         <div className="mb-5 flex items-center gap-2">
           <Target className="size-5 text-[hsl(var(--primary))]" />
-          <h2 className="font-display text-xl font-bold">Notre méthode</h2>
+          <h2 className="font-display text-xl font-bold">{t.apropos.methodeTitre}</h2>
         </div>
         <p className="mb-6 max-w-2xl text-sm leading-relaxed text-[hsl(var(--muted))]">
-          La valeur d&apos;un rapport d&apos;investissement tient à ce qu&apos;on peut vérifier.
-          Chaque étape de fabrication est donc conçue pour qu&apos;un lecteur puisse remonter
-          d&apos;une affirmation à la donnée qui la fonde.
+          {t.apropos.methodeAccroche}
         </p>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          {ETAPES_METHODE.map(({ Icone, titre, texte }, index) => (
+          {etapesMethode(t).map(({ Icone, titre, texte }, index) => (
             <motion.article
               key={titre}
               initial={{ opacity: 0, y: 12 }}
@@ -109,12 +104,10 @@ export default function APropos() {
       <section id="sources" className="scroll-mt-24">
         <div className="mb-5 flex items-center gap-2">
           <BarChart3 className="size-5 text-[hsl(var(--primary))]" />
-          <h2 className="font-display text-xl font-bold">Sources de données</h2>
+          <h2 className="font-display text-xl font-bold">{t.apropos.sourcesTitre}</h2>
         </div>
         <p className="mb-6 max-w-2xl text-sm leading-relaxed text-[hsl(var(--muted))]">
-          Les chiffres publiés dans nos rapports proviennent d&apos;organismes publics
-          tunisiens. Nous ne produisons aucune donnée primaire : notre travail consiste à
-          rassembler, structurer et mettre en perspective ce qui est déjà publié.
+          {t.apropos.sourcesAccroche}
         </p>
 
         <Card>
@@ -134,7 +127,7 @@ export default function APropos() {
                   rel="noreferrer noopener"
                   className="flex items-center gap-1.5 text-xs font-medium text-[hsl(var(--primary))] hover:underline"
                 >
-                  Site officiel <ExternalLink className="size-3" />
+                  {t.apropos.siteOfficiel} <ExternalLink className="size-3" />
                 </a>
               </div>
             ))}
@@ -147,26 +140,24 @@ export default function APropos() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ShieldCheck className="size-4 text-[hsl(var(--primary))]" />
-              Ce que nos rapports ne sont pas
+              {t.apropos.limitesTitre}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm leading-relaxed text-[hsl(var(--muted))]">
             <p>
-              Ce ne sont <strong className="text-[hsl(var(--foreground))]">pas des conseils
-              en investissement</strong>. Nous n&apos;évaluons pas votre situation, vos
-              objectifs ni votre tolérance au risque, et nous ne recommandons aucune
-              opération. Un rapport documente un secteur ; la décision vous appartient.
+              {t.apropos.limitesConseilAvant}
+              <strong className="text-[hsl(var(--foreground))]">{t.apropos.limitesConseilFort}</strong>
+              {t.apropos.limitesConseilApres}
             </p>
             <p>
-              Ce ne sont <strong className="text-[hsl(var(--foreground))]">pas des prévisions
-              garanties</strong>. Les projections 2025-2028 sont des extrapolations
-              statistiques d&apos;un historique. Elles sont utiles pour situer un ordre de
-              grandeur, jamais pour affirmer ce qui adviendra.
+              {t.apropos.limitesConseilAvant}
+              <strong className="text-[hsl(var(--foreground))]">{t.apropos.limitesPrevisionsFort}</strong>
+              {t.apropos.limitesPrevisionsApres}
             </p>
             <p>
-              Ce ne sont <strong className="text-[hsl(var(--foreground))]">pas des documents
-              d&apos;audit</strong>. Ils ne remplacent ni une due diligence, ni l&apos;avis
-              d&apos;un conseil juridique ou fiscal établi en Tunisie.
+              {t.apropos.limitesConseilAvant}
+              <strong className="text-[hsl(var(--foreground))]">{t.apropos.limitesAuditFort}</strong>
+              {t.apropos.limitesAuditApres}
             </p>
           </CardContent>
         </Card>

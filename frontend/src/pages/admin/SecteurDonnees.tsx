@@ -14,18 +14,21 @@ import { Input, Label, Textarea } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TableWrapper, Tbody, Td, Th, Thead, Tr, TrMessage } from '@/components/ui/table';
 import { ComparatifRegional } from '@/features/admin/ComparatifRegional';
+import { useTraduction } from '@/i18n';
+import { useChampTraduit } from '@/i18n/donnees';
+import type { Dictionnaire } from '@/i18n/fr';
 import { api, fileUrl } from '@/lib/api';
 import { cles } from '@/lib/queryClient';
 import { formatNombre } from '@/lib/utils';
 
 const CHAMPS_CHIFFRES = [
-  { cle: 'contribution_pib_pct', libelle: 'Contribution au PIB (%)', pas: '0.01' },
-  { cle: 'croissance_annuelle_pct', libelle: 'Croissance annuelle (%)', pas: '0.01' },
-  { cle: 'nombre_emplois', libelle: 'Emplois générés', pas: '1' },
-  { cle: 'exportations_mdt', libelle: 'Exportations (MDT)', pas: '0.01' },
-  { cle: 'nombre_entreprises', libelle: 'Entreprises actives', pas: '1' },
-  { cle: 'investissements_ide_mdt', libelle: 'Investissements IDE (MDT)', pas: '0.01' },
-  { cle: 'part_marche_regional_pct', libelle: 'Part de marché régionale (%)', pas: '0.01' },
+  { cle: 'contribution_pib_pct', libelle: (t: Dictionnaire) => t.admin.champPib, pas: '0.01' },
+  { cle: 'croissance_annuelle_pct', libelle: (t: Dictionnaire) => t.admin.champCroissance, pas: '0.01' },
+  { cle: 'nombre_emplois', libelle: (t: Dictionnaire) => t.admin.champEmplois, pas: '1' },
+  { cle: 'exportations_mdt', libelle: (t: Dictionnaire) => t.admin.champExportations, pas: '0.01' },
+  { cle: 'nombre_entreprises', libelle: (t: Dictionnaire) => t.admin.champEntreprises, pas: '1' },
+  { cle: 'investissements_ide_mdt', libelle: (t: Dictionnaire) => t.admin.champIde, pas: '0.01' },
+  { cle: 'part_marche_regional_pct', libelle: (t: Dictionnaire) => t.admin.champPartMarche, pas: '0.01' },
 ] as const;
 
 const NOUVELLE_ZONE = {
@@ -44,7 +47,7 @@ type Enregistrement = Record<string, unknown>;
 
 /** Liste éditable : entrées existantes + formulaire d'ajout. */
 function SectionListe({
-  titre, Icone, entrees, rendu, vide, onSupprimer, enfants,
+  titre, Icone, entrees, rendu, vide, onSupprimer, enfants, etiquetteSupprimer,
 }: {
   titre: string;
   Icone: typeof MapPin;
@@ -53,6 +56,7 @@ function SectionListe({
   vide: string;
   onSupprimer: (id: number) => void;
   enfants: React.ReactNode;
+  etiquetteSupprimer: string;
 }) {
   return (
     <Card>
@@ -72,7 +76,7 @@ function SectionListe({
               <li key={String(item.id)} className="flex items-start justify-between gap-4 py-3">
                 <div className="min-w-0 flex-1 text-sm">{rendu(item)}</div>
                 <Button
-                  size="icon" variant="ghost" aria-label="Supprimer"
+                  size="icon" variant="ghost" aria-label={etiquetteSupprimer}
                   onClick={() => onSupprimer(Number(item.id))}
                   className="text-[hsl(var(--danger))]"
                 >
@@ -111,6 +115,8 @@ function Champ({
 }
 
 export default function SecteurDonnees() {
+  const { t } = useTraduction();
+  const champ = useChampTraduit();
   const { id } = useParams<{ id: string }>();
   const secteurId = Number(id);
   const queryClient = useQueryClient();
@@ -158,20 +164,20 @@ export default function SecteurDonnees() {
       // et « nul » sont deux informations différentes.
       Object.entries(chiffres).map(([cle, valeur]) => [cle, valeur === '' ? null : Number(valeur)]),
     )),
-    onSuccess: () => { toast.success('Chiffres clés enregistrés'); rafraichir(); },
-    onError: (e: Error) => toast.error('Enregistrement impossible', { description: e.message }),
+    onSuccess: () => { toast.success(t.admin.chiffresEnregistres); rafraichir(); },
+    onError: (e: Error) => toast.error(t.admin.enregistrementImpossible, { description: e.message }),
   });
 
   const supprimer = useMutation({
     mutationFn: ({ kind, itemId }: { kind: string; itemId: number }) => api.deleteItem(kind, itemId),
-    onSuccess: () => { toast.success('Élément supprimé'); rafraichir(); },
-    onError: (e: Error) => toast.error('Suppression impossible', { description: e.message }),
+    onSuccess: () => { toast.success(t.admin.elementSupprime); rafraichir(); },
+    onError: (e: Error) => toast.error(t.admin.suppressionImpossible, { description: e.message }),
   });
 
   const projections = useMutation({
     mutationFn: () => api.recalculerProjections(secteurId),
-    onSuccess: () => { toast.success('Projections recalculées'); rafraichir(); },
-    onError: (e: Error) => toast.error('Recalcul impossible', { description: e.message }),
+    onSuccess: () => { toast.success(t.admin.projectionsRecalculees); rafraichir(); },
+    onError: (e: Error) => toast.error(t.admin.recalculImpossible, { description: e.message }),
   });
 
   const regenerer = useMutation({
@@ -179,9 +185,9 @@ export default function SecteurDonnees() {
     onSuccess: (resultat) => {
       const url = (resultat as { pdfUrl?: string }).pdfUrl;
       setPdfUrl(url ? fileUrl(url) : null);
-      toast.success('Rapport régénéré');
+      toast.success(t.admin.rapportRegenereToast);
     },
-    onError: (e: Error) => toast.error('Régénération impossible', { description: e.message }),
+    onError: (e: Error) => toast.error(t.admin.regenerationImpossible, { description: e.message }),
   });
 
   function ajouter(appel: (id: number, charge: Enregistrement) => Promise<unknown>,
@@ -190,12 +196,12 @@ export default function SecteurDonnees() {
       evenement.preventDefault();
       try {
         await appel(secteurId, charge);
-        toast.success('Ajouté');
+        toast.success(t.admin.ajoute);
         reinitialiser();
         rafraichir();
       } catch (erreur) {
-        toast.error("Ajout impossible", {
-          description: erreur instanceof Error ? erreur.message : 'Erreur inconnue',
+        toast.error(t.admin.ajoutImpossible, {
+          description: erreur instanceof Error ? erreur.message : t.admin.erreurInconnue,
         });
       }
     };
@@ -216,7 +222,7 @@ export default function SecteurDonnees() {
     return (
       <div className="mx-auto max-w-5xl">
         <Button asChild variant="ghost" size="sm" className="-ml-2 mb-4">
-          <Link to="/admin/secteurs"><ArrowLeft /> Retour aux secteurs</Link>
+          <Link to="/admin/secteurs"><ArrowLeft /> {t.admin.retourSecteurs}</Link>
         </Button>
         <div role="alert" className="surface-card p-6 text-sm">
           {(secteur.error as Error)?.message ?? 'Secteur introuvable.'}
@@ -233,41 +239,40 @@ export default function SecteurDonnees() {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <Button asChild variant="ghost" size="sm" className="-ml-2">
-        <Link to="/admin/secteurs"><ArrowLeft /> Retour aux secteurs</Link>
+        <Link to="/admin/secteurs"><ArrowLeft /> {t.admin.retourSecteurs}</Link>
       </Button>
 
       <header className="surface-card p-6">
-        <h1 className="font-display text-2xl font-bold leading-tight">{donnees.secteur.nom}</h1>
-        <p className="mt-1 text-sm text-[hsl(var(--muted))]">{donnees.secteur.description}</p>
+        <h1 className="font-display text-2xl font-bold leading-tight">{champ(donnees.secteur, 'nom')}</h1>
+        <p className="mt-1 text-sm text-[hsl(var(--muted))]">{champ(donnees.secteur, 'description')}</p>
 
         <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-[hsl(var(--border))] pt-5">
           <p className="mr-auto text-xs text-[hsl(var(--muted))]">
-            {formatNombre(stats.length)} séries · {zones.length} zones ·
-            {' '}{acteurs.length} acteurs · {textes.length} textes réglementaires
+            {t.admin.resume(formatNombre(stats.length), zones.length, acteurs.length, textes.length)}
           </p>
           <Button size="sm" variant="outline" chargement={projections.isPending}
             onClick={() => projections.mutate()}>
-            <TrendingUp /> Recalculer les projections
+            <TrendingUp /> {t.admin.recalculerProjections}
           </Button>
           <Button size="sm" chargement={regenerer.isPending} onClick={() => regenerer.mutate()}>
-            <RefreshCw /> Régénérer le rapport
+            <RefreshCw /> {t.admin.regenererRapport}
           </Button>
         </div>
 
         {pdfUrl && (
           <p className="mt-4 flex items-center gap-2 text-sm">
             <FileText className="size-4 text-[hsl(var(--success))]" />
-            Rapport régénéré —
+            {t.admin.rapportRegenere}
             <a href={pdfUrl} target="_blank" rel="noreferrer"
               className="font-medium text-[hsl(var(--primary))] hover:underline">
-              ouvrir le document
+              {t.admin.ouvrirDocument}
             </a>
           </p>
         )}
       </header>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">Chiffres clés</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">{t.admin.chiffresCles}</CardTitle></CardHeader>
         <CardContent>
           <form
             className="space-y-5"
@@ -276,14 +281,14 @@ export default function SecteurDonnees() {
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {CHAMPS_CHIFFRES.map(({ cle, libelle, pas }) => (
                 <Champ
-                  key={cle} label={libelle} type="number" pas={pas}
+                  key={cle} label={libelle(t)} type="number" pas={pas}
                   valeur={chiffres[cle] ?? ''}
                   onChange={(v) => setChiffres({ ...chiffres, [cle]: v })}
                 />
               ))}
             </div>
             <Button type="submit" chargement={enregistrerChiffres.isPending}>
-              <Save /> Enregistrer les chiffres clés
+              <Save /> {t.admin.enregistrerChiffres}
             </Button>
           </form>
         </CardContent>
@@ -292,8 +297,8 @@ export default function SecteurDonnees() {
       <ComparatifRegional secteurId={secteurId} />
 
       <SectionListe
-        titre="Zones géographiques et zones franches" Icone={MapPin}
-        entrees={zones} vide="Aucune zone renseignée."
+        titre={t.admin.zonesTitre} Icone={MapPin} etiquetteSupprimer={t.admin.supprimer}
+        entrees={zones} vide={t.admin.zonesVide}
         onSupprimer={(itemId) => supprimer.mutate({ kind: 'zones', itemId })}
         rendu={(z) => (
           <>
@@ -308,23 +313,23 @@ export default function SecteurDonnees() {
           <form className="space-y-3"
             onSubmit={ajouter(api.createZone, zone, () => setZone({ ...NOUVELLE_ZONE }))}>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Champ label="Nom" valeur={zone.nom} requis onChange={(v) => setZone({ ...zone, nom: v })} />
-              <Champ label="Type" valeur={zone.type} onChange={(v) => setZone({ ...zone, type: v })} />
-              <Champ label="Gouvernorat" valeur={zone.gouvernorat} onChange={(v) => setZone({ ...zone, gouvernorat: v })} />
-              <Champ label="Superficie (km²)" type="number" pas="0.01" valeur={zone.superficie_km2}
+              <Champ label={t.admin.champNom} valeur={zone.nom} requis onChange={(v) => setZone({ ...zone, nom: v })} />
+              <Champ label={t.admin.champType} valeur={zone.type} onChange={(v) => setZone({ ...zone, type: v })} />
+              <Champ label={t.admin.champGouvernorat} valeur={zone.gouvernorat} onChange={(v) => setZone({ ...zone, gouvernorat: v })} />
+              <Champ label={t.admin.champSuperficie} type="number" pas="0.01" valeur={zone.superficie_km2}
                 onChange={(v) => setZone({ ...zone, superficie_km2: v })} />
             </div>
-            <Textarea className="min-h-16" placeholder="Description" value={zone.description}
-              aria-label="Description de la zone"
+            <Textarea className="min-h-16" placeholder={t.admin.champDescription} value={zone.description}
+              aria-label={t.admin.descriptionZone}
               onChange={(e) => setZone({ ...zone, description: e.target.value })} />
-            <Button type="submit" size="sm" variant="outline"><Plus /> Ajouter la zone</Button>
+            <Button type="submit" size="sm" variant="outline"><Plus /> {t.admin.ajouterZone}</Button>
           </form>
         }
       />
 
       <SectionListe
-        titre="Acteurs principaux" Icone={Building2}
-        entrees={acteurs} vide="Aucun acteur renseigné."
+        titre={t.admin.acteursTitre} Icone={Building2} etiquetteSupprimer={t.admin.supprimer}
+        entrees={acteurs} vide={t.admin.acteursVide}
         onSupprimer={(itemId) => supprimer.mutate({ kind: 'acteurs', itemId })}
         rendu={(a) => (
           <>
@@ -339,23 +344,23 @@ export default function SecteurDonnees() {
           <form className="space-y-3"
             onSubmit={ajouter(api.createActeur, acteur, () => setActeur({ ...NOUVEL_ACTEUR }))}>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <Champ label="Nom" valeur={acteur.nom} requis onChange={(v) => setActeur({ ...acteur, nom: v })} />
-              <Champ label="Type" valeur={acteur.type} onChange={(v) => setActeur({ ...acteur, type: v })} />
-              <Champ label="Rôle" valeur={acteur.role} onChange={(v) => setActeur({ ...acteur, role: v })} />
-              <Champ label="Site web" valeur={acteur.site_web} onChange={(v) => setActeur({ ...acteur, site_web: v })} />
-              <Champ label="CA (MDT)" type="number" pas="0.01" valeur={acteur.chiffre_affaires}
+              <Champ label={t.admin.champNom} valeur={acteur.nom} requis onChange={(v) => setActeur({ ...acteur, nom: v })} />
+              <Champ label={t.admin.champType} valeur={acteur.type} onChange={(v) => setActeur({ ...acteur, type: v })} />
+              <Champ label={t.admin.champRole} valeur={acteur.role} onChange={(v) => setActeur({ ...acteur, role: v })} />
+              <Champ label={t.admin.champSiteWeb} valeur={acteur.site_web} onChange={(v) => setActeur({ ...acteur, site_web: v })} />
+              <Champ label={t.admin.champCa} type="number" pas="0.01" valeur={acteur.chiffre_affaires}
                 onChange={(v) => setActeur({ ...acteur, chiffre_affaires: v })} />
-              <Champ label="Employés" type="number" pas="1" valeur={acteur.nombre_employes}
+              <Champ label={t.admin.champEmployes} type="number" pas="1" valeur={acteur.nombre_employes}
                 onChange={(v) => setActeur({ ...acteur, nombre_employes: v })} />
             </div>
-            <Button type="submit" size="sm" variant="outline"><Plus /> Ajouter l&apos;acteur</Button>
+            <Button type="submit" size="sm" variant="outline"><Plus /> {t.admin.ajouterActeur}</Button>
           </form>
         }
       />
 
       <SectionListe
-        titre="Cadre réglementaire et fiscal" Icone={Gavel}
-        entrees={textes} vide="Aucun texte renseigné."
+        titre={t.admin.cadreTitre} Icone={Gavel} etiquetteSupprimer={t.admin.supprimer}
+        entrees={textes} vide={t.admin.cadreVide}
         onSupprimer={(itemId) => supprimer.mutate({ kind: 'cadre', itemId })}
         rendu={(c) => (
           <>
@@ -369,15 +374,15 @@ export default function SecteurDonnees() {
           <form className="space-y-3"
             onSubmit={ajouter(api.createCadre, cadre, () => setCadre({ ...NOUVEAU_CADRE }))}>
             <div className="grid gap-3 sm:grid-cols-3">
-              <Champ label="Titre" valeur={cadre.titre} requis onChange={(v) => setCadre({ ...cadre, titre: v })} />
-              <Champ label="Type" valeur={cadre.type_texte} onChange={(v) => setCadre({ ...cadre, type_texte: v })} />
-              <Champ label="Année" type="number" pas="1" valeur={cadre.annee}
+              <Champ label={t.admin.champTitre} valeur={cadre.titre} requis onChange={(v) => setCadre({ ...cadre, titre: v })} />
+              <Champ label={t.admin.champType} valeur={cadre.type_texte} onChange={(v) => setCadre({ ...cadre, type_texte: v })} />
+              <Champ label={t.admin.champAnnee} type="number" pas="1" valeur={cadre.annee}
                 onChange={(v) => setCadre({ ...cadre, annee: v })} />
             </div>
-            <Textarea className="min-h-16" placeholder="Description" value={cadre.description}
-              aria-label="Description du texte"
+            <Textarea className="min-h-16" placeholder={t.admin.champDescription} value={cadre.description}
+              aria-label={t.admin.descriptionTexte}
               onChange={(e) => setCadre({ ...cadre, description: e.target.value })} />
-            <Button type="submit" size="sm" variant="outline"><Plus /> Ajouter le texte</Button>
+            <Button type="submit" size="sm" variant="outline"><Plus /> {t.admin.ajouterTexte}</Button>
           </form>
         }
       />
@@ -385,31 +390,31 @@ export default function SecteurDonnees() {
       <Card>
         <CardHeader className="flex-row items-center justify-between gap-4">
           <CardTitle className="flex items-center gap-2 text-base">
-            <TrendingUp className="size-4 text-[hsl(var(--primary))]" /> Séries statistiques
+            <TrendingUp className="size-4 text-[hsl(var(--primary))]" /> {t.admin.seriesTitre}
           </CardTitle>
           <Badge variant="neutre">{stats.length}</Badge>
         </CardHeader>
         <CardContent className="px-0 sm:px-0">
           <TableWrapper className="px-2 sm:px-3">
             <Thead>
-              <Th>Indicateur</Th>
-              <Th>Unité</Th>
+              <Th>{t.admin.colonneIndicateur}</Th>
+              <Th>{t.admin.colonneUnite}</Th>
               <Th numerique>2022</Th>
               <Th numerique>2023</Th>
               <Th numerique>2024</Th>
-              <Th numerique>2028 (est.)</Th>
-              <Th>Méthode</Th>
+              <Th numerique>{t.admin.colonneEstimation}</Th>
+              <Th>{t.admin.colonneMethode}</Th>
             </Thead>
             <Tbody>
               {stats.length === 0 && (
-                <TrMessage colonnes={7}>Aucune série pour ce secteur.</TrMessage>
+                <TrMessage colonnes={7}>{t.admin.aucuneSerie}</TrMessage>
               )}
               {stats.slice(0, 40).map((serie) => (
                 <Tr key={String(serie.id)}>
                   <Td className="max-w-xs">
-                    <span className="line-clamp-2">{String(serie.indicateur)}</span>
+                    <span className="line-clamp-2">{champ(serie, 'indicateur')}</span>
                   </Td>
-                  <Td className="text-[hsl(var(--muted))]">{String(serie.unite ?? '—')}</Td>
+                  <Td className="text-[hsl(var(--muted))]">{champ(serie, 'unite') || '—'}</Td>
                   <Td numerique>{serie.valeur_2022 != null ? formatNombre(Number(serie.valeur_2022), 1) : '—'}</Td>
                   <Td numerique>{serie.valeur_2023 != null ? formatNombre(Number(serie.valeur_2023), 1) : '—'}</Td>
                   <Td numerique>{serie.valeur_2024 != null ? formatNombre(Number(serie.valeur_2024), 1) : '—'}</Td>
@@ -433,7 +438,7 @@ export default function SecteurDonnees() {
 
           {stats.length > 40 && (
             <p className="px-6 pt-3 text-xs text-[hsl(var(--muted))]">
-              40 premières séries affichées sur {formatNombre(stats.length)}.
+              {t.admin.seriesTronquees(formatNombre(stats.length))}
             </p>
           )}
         </CardContent>

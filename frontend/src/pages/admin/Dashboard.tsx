@@ -9,6 +9,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { StatCard } from '@/components/ui/stat-card';
 import { GraphiqueVentes } from '@/components/charts/GraphiqueVentes';
 import { GraphiqueRepartition } from '@/components/charts/GraphiqueRepartition';
+import { useTraduction } from '@/i18n';
+import { useChampTraduit, useTitreRapport } from '@/i18n/donnees';
 import { api, fileUrl } from '@/lib/api';
 import { cles } from '@/lib/queryClient';
 import type { StatSecteur } from '@/lib/types';
@@ -35,6 +37,9 @@ interface RapportRecent {
 
 /** Panneau de controle — vue d'ensemble des ventes et des rapports (CDC section 7). */
 export default function Dashboard() {
+  const { t } = useTraduction();
+  const champ = useChampTraduit();
+  const titreRapport = useTitreRapport();
   const stats = useQuery({ queryKey: cles.adminStats, queryFn: api.stats });
 
   if (stats.isLoading) {
@@ -79,50 +84,49 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="font-display text-2xl font-bold">Tableau de bord</h1>
+        <h1 className="font-display text-2xl font-bold">{t.admin.tableauBordTitre}</h1>
         <p className="mt-1 text-sm text-[hsl(var(--muted))]">
-          Activite commerciale et rapports produits.
+          {t.admin.tableauBordAccroche}
         </p>
       </header>
 
       {toutSimule && (
         <p className="surface-card px-4 py-3 text-sm">
-          <Badge variant="avertissement" className="mr-2">Mode démonstration</Badge>
-          Aucune vente reelle enregistree : les montants ci-dessous correspondent a des
-          commandes validees sans debit.
+          <Badge variant="avertissement" className="mr-2">{t.admin.modeDemonstration}</Badge>
+          {t.admin.aucuneVenteReelle}
         </p>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           index={0}
-          libelle="Rapports vendus"
+          libelle={t.admin.rapportsVendus}
           valeur={formatNombre(totaux.nb_ventes_total)}
           Icone={TrendingUp}
           detail={totaux.nb_ventes_simulees > 0
-            ? `dont ${formatNombre(totaux.nb_ventes_simulees)} en démonstration`
+            ? t.admin.dontDemonstration(formatNombre(totaux.nb_ventes_simulees))
             : undefined}
         />
         <StatCard
           index={1}
-          libelle={toutSimule ? 'Montant des commandes' : "Chiffre d'affaires"}
+          libelle={toutSimule ? t.admin.montantCommandes : t.admin.chiffreAffaires}
           valeur={formatMontant(toutSimule ? totaux.revenu_total : totaux.revenu, donnees.devise)}
           Icone={Wallet}
           teinte="succes"
           detail={!toutSimule && totaux.revenu_simule > 0
-            ? `${formatMontant(totaux.revenu_simule, donnees.devise)} simules, exclus`
+            ? t.admin.simulesExclus(formatMontant(totaux.revenu_simule, donnees.devise))
             : undefined}
         />
         <StatCard
           index={2}
-          libelle="Rapports générés"
+          libelle={t.admin.rapportsGeneres}
           valeur={formatNombre(totaux.nb_rapports_generes)}
           Icone={FileText}
         />
         <StatCard
           index={3}
-          libelle="Secteur le plus demande"
-          valeur={meilleur && (meilleur.revenu + meilleur.revenu_simule) > 0 ? meilleur.nom : '—'}
+          libelle={t.admin.secteurPlusDemande}
+          valeur={meilleur && (meilleur.revenu + meilleur.revenu_simule) > 0 ? champ(meilleur, 'nom') : '—'}
           Icone={Layers}
           teinte="accent"
         />
@@ -130,14 +134,14 @@ export default function Dashboard() {
 
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <Card>
-          <CardHeader><CardTitle>Ventes par secteur</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t.admin.ventesParSecteur}</CardTitle></CardHeader>
           <CardContent>
             <GraphiqueVentes donnees={parSecteur} />
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader><CardTitle>Part de chaque secteur</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t.admin.partChaqueSecteur}</CardTitle></CardHeader>
           <CardContent>
             {/* Le graphique en barres compare les montants, l'anneau montre le
                 POIDS RELATIF : deux lectures distinctes de la meme serie. En
@@ -145,11 +149,11 @@ export default function Dashboard() {
                 volume total plutot que d'afficher un anneau vide. */}
             <GraphiqueRepartition
               donnees={parSecteur.map((secteur) => ({
-                nom: secteur.nom,
+                nom: champ(secteur, 'nom'),
                 valeur: Number(secteur.revenu ?? 0) + Number(secteur.revenu_simule ?? 0),
               }))}
               unite={donnees.devise}
-              total={{ valeur: formatMontant(totaux.revenu_total, donnees.devise), libelle: 'toutes ventes' }}
+              total={{ valeur: formatMontant(totaux.revenu_total, donnees.devise), libelle: t.admin.toutesVentes }}
             />
           </CardContent>
         </Card>
@@ -157,15 +161,15 @@ export default function Dashboard() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
-          <CardHeader><CardTitle>Detail par secteur</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t.admin.detailParSecteur}</CardTitle></CardHeader>
           <CardContent className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[hsl(var(--border))] text-left text-xs uppercase tracking-wide text-[hsl(var(--muted))]">
-                  <th className="pb-2 font-semibold">Secteur</th>
-                  <th className="pb-2 text-right font-semibold">Ventes</th>
-                  <th className="pb-2 text-right font-semibold">Revenus</th>
-                  <th className="pb-2 text-right font-semibold">Rapports</th>
+                  <th className="pb-2 font-semibold">{t.admin.colonneSecteur}</th>
+                  <th className="pb-2 text-right font-semibold">{t.admin.colonneVentes}</th>
+                  <th className="pb-2 text-right font-semibold">{t.admin.colonneRevenus}</th>
+                  <th className="pb-2 text-right font-semibold">{t.admin.colonneRapports}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[hsl(var(--border))]">
@@ -173,7 +177,7 @@ export default function Dashboard() {
                   <tr key={secteur.id}>
                     <td className="py-3">
                       <Link className="font-medium hover:underline" to={`/admin/secteurs/${secteur.id}`}>
-                        {secteur.nom}
+                        {champ(secteur, 'nom')}
                       </Link>
                     </td>
                     <td className="py-3 text-right">
@@ -204,7 +208,7 @@ export default function Dashboard() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle>Derniers rapports produits</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t.admin.derniersRapports}</CardTitle></CardHeader>
           <CardContent>
             {donnees.rapportsRecents?.length ? (
               <ul className="divide-y divide-[hsl(var(--border))]">
@@ -212,16 +216,16 @@ export default function Dashboard() {
                   <li key={rapport.id} className="flex items-center gap-3 py-2.5">
                     <FileText className="size-4 shrink-0 text-[hsl(var(--muted))]" />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{rapport.titre}</p>
+                      <p className="truncate text-sm font-medium">{titreRapport(rapport)}</p>
                       <p className="text-xs text-[hsl(var(--muted))]">
                         {formatDate(rapport.date_generation, true)}
-                        {rapport.nombre_pages ? ` · ${rapport.nombre_pages} pages` : ''}
+                        {rapport.nombre_pages ? ` · ${t.admin.pages(rapport.nombre_pages)}` : ''}
                       </p>
                     </div>
                     {rapport.chemin_fichier && (
                       <Button asChild variant="ghost" size="sm">
                         <a href={fileUrl(rapport.chemin_fichier)} target="_blank" rel="noreferrer">
-                          Ouvrir
+                          {t.admin.ouvrir}
                         </a>
                       </Button>
                     )}
@@ -230,7 +234,7 @@ export default function Dashboard() {
               </ul>
             ) : (
               <p className="py-8 text-center text-sm text-[hsl(var(--muted))]">
-                Aucun rapport produit pour le moment.
+                {t.admin.aucunRapportProduit}
               </p>
             )}
           </CardContent>

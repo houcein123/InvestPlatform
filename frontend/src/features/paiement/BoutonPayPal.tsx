@@ -4,6 +4,8 @@ import {
 } from '@paypal/react-paypal-js';
 import { Info, Loader2 } from 'lucide-react';
 
+import { useTraduction } from '@/i18n';
+import type { Dictionnaire } from '@/i18n/fr';
 import { api } from '@/lib/api';
 import type { ConfigPaiement, PaiementConfirme } from '@/lib/types';
 
@@ -15,20 +17,20 @@ interface Props {
 }
 
 /** Traduit les echecs les plus frequents en consigne actionnable. */
-function messageLisible(erreur: unknown) {
+function messageLisible(erreur: unknown, t: Dictionnaire) {
   const brut = erreur instanceof Error ? erreur.message : String(erreur ?? '');
 
   if (/popup|window|blocked|closed/i.test(brut)) {
-    return "La fenetre PayPal n'a pas pu s'ouvrir. Autorisez les fenêtres surgissantes pour ce site, puis réessayez.";
+    return t.paypal.fenetreBloquee;
   }
   if (/Connexion requise|401/i.test(brut)) {
-    return 'Votre session a expiré. Reconnectez-vous puis relancez le paiement.';
+    return t.paypal.sessionExpiree;
   }
-  return brut || 'Le paiement a échoué.';
+  return brut || t.paypal.echecDefaut;
 }
 
 /** Etat de chargement du SDK, lu depuis le fournisseur. */
-function EtatSdk() {
+function EtatSdk({ t }: { t: Dictionnaire }) {
   const [{ isPending, isRejected }] = usePayPalScriptReducer();
 
   if (isRejected) {
@@ -41,7 +43,7 @@ function EtatSdk() {
   if (isPending) {
     return (
       <p className="flex items-center gap-2 text-sm text-[hsl(var(--muted))]">
-        <Loader2 className="size-4 animate-spin" /> Chargement de PayPal...
+        <Loader2 className="size-4 animate-spin" /> {t.paypal.chargement}
       </p>
     );
   }
@@ -68,6 +70,7 @@ function EtatSdk() {
  * commande n'a aucun effet, et qui prete a confusion.
  */
 export function BoutonPayPal({ config, sectorId, onPaiementConfirme, onErreur }: Props) {
+  const { t } = useTraduction();
   const [enCours, setEnCours] = useState(false);
 
   // L'identifiant d'achat vit dans une reference : il est cree par le serveur
@@ -96,7 +99,7 @@ export function BoutonPayPal({ config, sectorId, onPaiementConfirme, onErreur }:
           components: 'buttons',
         }}
       >
-        <EtatSdk />
+        <EtatSdk t={t} />
 
         <PayPalButtons
           fundingSource={FUNDING.PAYPAL}
@@ -113,7 +116,7 @@ export function BoutonPayPal({ config, sectorId, onPaiementConfirme, onErreur }:
               return commande.orderId;
             } catch (erreur) {
               setEnCours(false);
-              onErreur(messageLisible(erreur));
+              onErreur(messageLisible(erreur, t));
               throw erreur;
             }
           }}
@@ -122,14 +125,14 @@ export function BoutonPayPal({ config, sectorId, onPaiementConfirme, onErreur }:
               const resultat = await api.capturePayment(donnees.orderID, achatId.current as number);
               onPaiementConfirme({ ...resultat, achatId: achatId.current as number });
             } catch (erreur) {
-              onErreur(messageLisible(erreur));
+              onErreur(messageLisible(erreur, t));
             } finally {
               setEnCours(false);
             }
           }}
           onError={(erreur) => {
             setEnCours(false);
-            onErreur(messageLisible(erreur));
+            onErreur(messageLisible(erreur, t));
           }}
           onCancel={() => {
             setEnCours(false);
@@ -145,11 +148,8 @@ export function BoutonPayPal({ config, sectorId, onPaiementConfirme, onErreur }:
         <p className="flex items-start gap-2 rounded-[var(--radius-control)] border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2.5 text-xs leading-relaxed text-[hsl(var(--muted))]">
           <Info className="mt-0.5 size-3.5 shrink-0" />
           <span>
-            <strong className="text-[hsl(var(--foreground))]">Environnement de test.</strong>{' '}
-            Aucun montant reel ne sera debite. Cliquez sur <strong>Connexion</strong> dans
-            la fenetre PayPal et utilisez un compte acheteur sandbox
-            (developer.paypal.com → Testing Tools → Sandbox accounts) : un compte
-            PayPal reel n'existe pas dans cet environnement.
+            <strong className="text-[hsl(var(--foreground))]">{t.paypal.testTitre}</strong>{' '}
+            {t.paypal.testTexte}
           </span>
         </p>
       )}

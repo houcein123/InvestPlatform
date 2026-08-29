@@ -77,6 +77,17 @@ public class Achat {
     @Column(name = "pdf_genere")
     private String pdfGenere;
 
+    /**
+     * Langue de rédaction commandée (migration 010).
+     *
+     * Portée par l'ACHAT, pas par la session : une relance doit reproduire la
+     * langue payée, pas celle du navigateur au moment du clic.
+     */
+    @JsonProperty("langue_rapport")
+    @Column(name = "langue_rapport")
+    @Builder.Default
+    private String langueRapport = "fr";
+
     @JsonProperty("created_at")
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
